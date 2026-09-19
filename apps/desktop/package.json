@@ -1,0 +1,31 @@
+{
+  "name": "@patternforge/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "dependencies": {
+    "@patternforge/ai-provider": "0.1.0",
+    "@patternforge/batch-engine": "0.1.0",
+    "@patternforge/core": "0.1.0",
+    "@patternforge/export-engine": "0.1.0",
+    "@patternforge/library": "0.1.0",
+    "@patternforge/pattern-engine": "0.1.0",
+    "@patternforge/renderer-engine": "0.1.0",
+    "@patternforge/shared": "0.1.0",
+    "@patternforge/ui": "0.1.0",
+    "@tauri-apps/plugin-dialog": "^2.4.0",
+    "@tauri-apps/plugin-fs": "^2.4.0",
+    "preact": "^10.26.9"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.2",
+    "@tauri-apps/cli": "^2.8.4",
+    "vite": "^7.1.7"
+  }
+}

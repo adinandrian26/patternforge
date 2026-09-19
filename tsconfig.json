@@ -1,0 +1,55 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "allowJs": false,
+    "skipLibCheck": true,
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@patternforge/shared": ["packages/shared/src/index.ts"],
+      "@patternforge/core": ["packages/core/src/index.ts"],
+      "@patternforge/pattern-engine": ["packages/pattern-engine/src/index.ts"],
+      "@patternforge/color-engine": ["packages/color-engine/src/index.ts"],
+      "@patternforge/tile-engine": ["packages/tile-engine/src/index.ts"],
+      "@patternforge/renderer-engine": [
+        "packages/renderer-engine/src/index.ts"
+      ],
+      "@patternforge/export-engine": ["packages/export-engine/src/index.ts"],
+      "@patternforge/batch-engine": ["packages/batch-engine/src/index.ts"],
+      "@patternforge/library": ["packages/library/src/index.ts"],
+      "@patternforge/ai-provider": ["packages/ai-provider/src/index.ts"],
+      "@patternforge/ui": ["packages/ui/src/index.tsx"]
+    }
+  },
+  "include": [
+    "apps/desktop/src/**/*.ts",
+    "apps/desktop/src/**/*.tsx",
+    "apps/desktop/vite.config.ts",
+    "packages/*/src/**/*.ts",
+    "packages/*/src/**/*.tsx",
+    "tests/**/*.ts",
+    "vitest.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "apps/desktop/dist",
+    "apps/desktop/src-tauri/target",
+    "apps/desktop/src-tauri/gen"
+  ]
+}

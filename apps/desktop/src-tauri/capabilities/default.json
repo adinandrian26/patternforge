@@ -1,0 +1,11 @@
+{
+  "identifier": "main-capability",
+  "description": "Least-privilege capabilities: core default plus only the save-dialog write path used by FileSink (no shell, no read, no broad access)",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-save",
+    "fs:allow-write-file",
+    "fs:allow-rename"
+  ]
+}
