@@ -1,12 +1,14 @@
 import type { Result } from "@patternforge/shared";
 
-/** Raster export formats. SVG is vector; PNG/JPEG are raster. */
-export const EXPORT_FORMATS = ["png", "jpeg", "svg"] as const;
+/** Raster export formats. SVG/EPS are vector; PNG/JPEG are raster. */
+export const EXPORT_FORMATS = ["png", "jpeg", "svg", "eps"] as const;
 
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 export function isExportFormat(value: unknown): value is ExportFormat {
-  return value === "png" || value === "jpeg" || value === "svg";
+  return (
+    value === "png" || value === "jpeg" || value === "svg" || value === "eps"
+  );
 }
 
 export const DEFAULT_JPEG_QUALITY = 90;
@@ -43,6 +45,7 @@ export type ExportErrorCode =
   | "INVALID_COLOR"
   | "RENDER_LIMIT_EXCEEDED"
   | "ENCODE_FAILED"
+  | "STOCK_SIZE_INVALID"
   | "FILESYSTEM_ERROR"
   | "CANCELLED";
 
@@ -75,6 +78,8 @@ export function extensionForFormat(format: ExportFormat): string {
       return "jpg";
     case "svg":
       return "svg";
+    case "eps":
+      return "eps";
   }
 }
 
@@ -86,5 +91,7 @@ export function mimeForFormat(format: ExportFormat): string {
       return "image/jpeg";
     case "svg":
       return "image/svg+xml";
+    case "eps":
+      return "application/postscript";
   }
 }

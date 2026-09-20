@@ -14,8 +14,9 @@ export interface ExportPanelProps {
 
 /** Export tab: format/quality/filename + status. No batch here. */
 export function ExportPanel({ config, pattern, sink, tile }: ExportPanelProps) {
-  const [format, setFormat] = useState<"png" | "jpeg" | "svg">("png");
+  const [format, setFormat] = useState<"png" | "jpeg" | "svg" | "eps">("png");
   const [quality, setQuality] = useState(90);
+  const [stockSize, setStockSize] = useState(3000);
   const [filename, setFilename] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -43,7 +44,7 @@ export function ExportPanel({ config, pattern, sink, tile }: ExportPanelProps) {
         currentTile,
         currentPattern,
         currentConfig,
-        { filename, format, quality },
+        { filename, format, quality, stockSize },
       );
       if (!prepared.ok) {
         setStatus(`Error: ${prepared.error.message}`);
@@ -76,14 +77,32 @@ export function ExportPanel({ config, pattern, sink, tile }: ExportPanelProps) {
           <select
             value={format}
             onChange={(event) =>
-              setFormat(event.currentTarget.value as "png" | "jpeg" | "svg")
+              setFormat(
+                event.currentTarget.value as "png" | "jpeg" | "svg" | "eps",
+              )
             }
           >
             <option value="png">PNG (lossless RGBA)</option>
             <option value="jpeg">JPEG (lossy, quality)</option>
             <option value="svg">SVG (vector)</option>
+            <option value="eps">EPS (Shutterstock vector)</option>
           </select>
         </label>
+        {format === "eps" ? (
+          <label className="control-group">
+            Artwork size (long side)
+            <select
+              value={stockSize}
+              onChange={(event) =>
+                setStockSize(Number(event.currentTarget.value))
+              }
+            >
+              <option value={2000}>2000px — 4MP (minimum)</option>
+              <option value={3000}>3000px — 9MP (recommended)</option>
+              <option value={4000}>4000px — 16MP (large)</option>
+            </select>
+          </label>
+        ) : null}
         {format === "jpeg" ? (
           <label className="control-group">
             Quality: {quality}
@@ -117,7 +136,10 @@ export function ExportPanel({ config, pattern, sink, tile }: ExportPanelProps) {
         {status === null ? null : <p className="hint-text">{status}</p>}
         <p className="hint-text">
           PNG/JPEG encode the rendered {currentTile.width}×{currentTile.height}{" "}
-          tile. SVG serializes pattern vectors with 9 seamless copies. Files
+          tile. SVG serializes pattern vectors with 9 seamless copies. EPS
+          exports a single Shutterstock-ready tile (Illustrator 8/10
+          compatible): strokes expanded, transparency flattened to sRGB, no
+          text, no raster — artwork 4–25MP guaranteed by the size presets. Files
           save via native dialog when available, otherwise browser download.
         </p>
       </div>

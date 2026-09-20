@@ -12,7 +12,7 @@ CORE: deterministic seed (uint32 canonical), Mulberry32 (`prng-v1`), pattern gen
 
 RENDER: RGBA raster renderer, seamless rendering (wrapped-center + 9 translated copies), 3×3 / 1×1 preview, pixel validation (toleransi 0), checksum FNV-1a, golden `a319b114` + `473443c3`.
 
-EXPORT: PNG (encoder deterministik tanpa dependensi, stored DEFLATE), JPEG (via `jpeg-js`, quality 1–100 default 90, composited opaque), SVG (vektor asli, 9 copies ter-clip, tanpa script/handlers/URL eksternal), atomic write (temp + rename) via Tauri fs bila tersedia, fallback browser download, typed errors, cancellation.
+EXPORT: PNG (encoder deterministik tanpa dependensi, stored DEFLATE), JPEG (via `jpeg-js`, quality 1–100 default 90, composited opaque), SVG (vektor asli, 9 copies ter-clip, tanpa script/handlers/URL eksternal), EPS Shutterstock-ready (single tile, Illustrator 8/10 compatible, stroke di-expand, transparansi di-flatten ke sRGB, preset 2000/3000/4000 = 4/9/16MP, 100% prosedural tanpa AI), atomic write (temp + rename) via Tauri fs bila tersedia, fallback browser download, typed errors, cancellation.
 
 PRODUCTIVITY: presets (save/load/duplicate/rename/delete, max 100), history (50 terakhir, timestamp hanya metadata UI), batch sequential (max 100, seed sequence, progress, cancel, failure isolation).
 

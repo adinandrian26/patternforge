@@ -60,7 +60,7 @@ export function validateBatchRequest(
   if (!isExportFormat(format)) {
     return err({
       code: "INVALID_FORMAT",
-      message: "format must be one of: png, jpeg, svg.",
+      message: "format must be one of: png, jpeg, svg, eps.",
     });
   }
   const configCheck = validateGenerationConfig(

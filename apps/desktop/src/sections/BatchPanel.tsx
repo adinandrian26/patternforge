@@ -11,6 +11,8 @@ import {
 } from "@patternforge/renderer-engine";
 import {
   buildFilename,
+  DEFAULT_STOCK_EPS_SIZE,
+  exportPatternEps,
   exportPatternSvg,
   exportRaster,
   validateExportConfig,
@@ -42,7 +44,7 @@ export function BatchPanel({ baseConfig, sink }: BatchPanelProps) {
   const [startSeed, setStartSeed] = useState(
     baseConfig === null ? "1000" : String(baseConfig.seed),
   );
-  const [format, setFormat] = useState<"png" | "jpeg" | "svg">("png");
+  const [format, setFormat] = useState<"png" | "jpeg" | "svg" | "eps">("png");
   const [state, setState] = useState<BatchUiState>({
     progress: "",
     results: [],
@@ -157,7 +159,17 @@ export function BatchPanel({ baseConfig, sink }: BatchPanelProps) {
                 background: config.backgroundColor,
                 filename: "batch.svg",
               })
-            : exportRaster(rendered.value, exportConfig.value);
+            : request.value.format === "eps"
+              ? exportPatternEps(
+                  generated.value,
+                  {
+                    ...exportConfig.value,
+                    background: config.backgroundColor,
+                    filename: "batch.eps",
+                  },
+                  DEFAULT_STOCK_EPS_SIZE,
+                )
+              : exportRaster(rendered.value, exportConfig.value);
         if (!encoded.ok) {
           return { error: encoded.error.message, index, seed: String(seed) };
         }
@@ -234,12 +246,15 @@ export function BatchPanel({ baseConfig, sink }: BatchPanelProps) {
           <select
             value={format}
             onChange={(event) =>
-              setFormat(event.currentTarget.value as "png" | "jpeg" | "svg")
+              setFormat(
+                event.currentTarget.value as "png" | "jpeg" | "svg" | "eps",
+              )
             }
           >
             <option value="png">PNG</option>
             <option value="jpeg">JPEG</option>
             <option value="svg">SVG</option>
+            <option value="eps">EPS (Shutterstock)</option>
           </select>
         </label>
         <div className="seed-row">

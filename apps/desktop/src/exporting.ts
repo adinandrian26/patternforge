@@ -2,6 +2,8 @@ import { err, ok, type Result } from "@patternforge/shared";
 import type { GenerationConfig, GenerationResult } from "@patternforge/core";
 import {
   buildFilename,
+  DEFAULT_STOCK_EPS_SIZE,
+  exportPatternEps,
   exportPatternSvg,
   exportRaster,
   mimeForFormat,
@@ -22,6 +24,8 @@ export interface ExportRequestInput {
   readonly filename?: string;
   readonly format: ExportFormat;
   readonly quality?: number;
+  /** EPS only: artwork long side (2000/3000/4000). Defaults to 3000. */
+  readonly stockSize?: number;
 }
 
 export interface PreparedExport {
@@ -63,6 +67,17 @@ export function prepareTileExport(
   const exportConfig = resolved.value;
   if (exportConfig.format === "svg") {
     const encoded = exportPatternSvg(pattern, exportConfig);
+    if (!encoded.ok) {
+      return err(encoded.error);
+    }
+    return ok({ file: encoded.value });
+  }
+  if (exportConfig.format === "eps") {
+    const encoded = exportPatternEps(
+      pattern,
+      exportConfig,
+      request.stockSize ?? DEFAULT_STOCK_EPS_SIZE,
+    );
     if (!encoded.ok) {
       return err(encoded.error);
     }

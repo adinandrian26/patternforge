@@ -1,19 +1,19 @@
 # PatternForge Export Engine
 
 `@patternforge/export-engine` mengubah pattern/raster menjadi file
-(PNG/JPEG/SVG) yang siap ditulis via `FileSink`. Core export
+(PNG/JPEG/SVG/EPS) yang siap ditulis via `FileSink`. Core export
 browser-independent; filesystem hanya lewat adapter.
 
 ## Pipeline
 
 ```text
 Pattern (GenerationResult)
-  |            \
-  | SVG         \ Raster (renderTile)
-  v              v
-serializeSvg   exportRaster (PNG/JPEG)
-  |              |
-  v              v
+  |            \           \
+  | SVG         \ EPS       \ Raster (renderTile)
+  v              v           v
+serializeSvg  serializeEps  exportRaster (PNG/JPEG)
+  |              |           |
+  v              v           v
 EncodedFile { bytes, filename, mimeType, format, width, height }
   |
   v
@@ -47,6 +47,20 @@ terhadap rect tile. Angka locale-free (≤3 desimal). Keamanan: tanpa
 (kecuali deklarasi namespace `xmlns` yang wajib) — ditegakkan oleh
 tes untuk semua template.
 
+## EPS (Shutterstock-ready vector)
+
+Serializer single-tile deterministik untuk submission vector
+Shutterstock (100% prosedural, tanpa AI). Hanya operator PostScript
+Level 1 (`moveto/lineto/curveto/closepath/fill`, `setrgbcolor`,
+`gsave/grestore`, `translate/rotate/scale`, `clip`) sehingga kompatibel
+Illustrator 8/10. Kepatuhan dipaksa oleh konstruksi: single tile (tanpa
+duplikasi 9-copy), stroke di-expand menjadi filled path (nol operator
+`stroke`), transparansi di-flatten ke sRGB solid (nol operator opacity),
+tanpa teks/font, tanpa raster/efek/gradien. Sisi panjang artwork ikut
+preset 2000/3000/4000 (4/9/16MP); aturan 4–25MP dan plafon 100MB
+divalidasi (`STOCK_SIZE_INVALID`). Skala vektor lossless dari tile
+preview berapa pun. Tanpa timestamp (clock-free, byte-identik).
+
 ## Filenames
 
 Allowlist `[A-Za-z0-9._-]`, traversal (`..`), separator, dan leading
@@ -62,5 +76,5 @@ baris (PNG) dan pre/post encode (JPEG), per-item (batch).
 ## Errors
 
 `INVALID_FORMAT/QUALITY/FILENAME/COLOR`, `RENDER_LIMIT_EXCEEDED`,
-`ENCODE_FAILED`, `FILESYSTEM_ERROR`, `CANCELLED` — semua typed
+`ENCODE_FAILED`, `STOCK_SIZE_INVALID`, `FILESYSTEM_ERROR`, `CANCELLED` — semua typed
 `Result`, user-friendly di UI.

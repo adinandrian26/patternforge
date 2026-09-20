@@ -35,7 +35,10 @@ export function validateExportConfig(
 ): ExportResult<ExportConfig> {
   const format = input.format ?? "png";
   if (!isExportFormat(format)) {
-    return invalid("INVALID_FORMAT", "format must be one of: png, jpeg, svg.");
+    return invalid(
+      "INVALID_FORMAT",
+      "format must be one of: png, jpeg, svg, eps.",
+    );
   }
 
   let quality = DEFAULT_JPEG_QUALITY;
@@ -135,7 +138,8 @@ function withExtension(name: string, format: ExportFormat): string {
     lower.endsWith(".png") ||
     lower.endsWith(".jpg") ||
     lower.endsWith(".jpeg") ||
-    lower.endsWith(".svg")
+    lower.endsWith(".svg") ||
+    lower.endsWith(".eps")
   ) {
     const dot = name.lastIndexOf(".");
     return `${name.slice(0, dot)}${ext}`;
