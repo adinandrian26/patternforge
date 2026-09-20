@@ -107,8 +107,8 @@ describe("history", () => {
 });
 
 describe("templates", () => {
-  it("exposes fourteen validating deterministic templates", () => {
-    expect(BUILTIN_TEMPLATES).toHaveLength(14);
+  it("exposes seventeen validating deterministic templates", () => {
+    expect(BUILTIN_TEMPLATES).toHaveLength(17);
     const ids = new Set<string>();
     for (const template of BUILTIN_TEMPLATES) {
       expect(template.id.length).toBeGreaterThan(0);

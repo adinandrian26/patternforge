@@ -28,6 +28,9 @@ const CORAL: RgbaColor = { a: 255, b: 110, g: 130, r: 240 };
 const PLUM: RgbaColor = { a: 255, b: 130, g: 70, r: 110 };
 const BLOOM_BG: RgbaColor = { a: 255, b: 40, g: 90, r: 245 };
 const CREAM: RgbaColor = { a: 255, b: 235, g: 245, r: 255 };
+const LEAF_GREEN: RgbaColor = { a: 255, b: 110, g: 150, r: 70 };
+const MINT_BG: RgbaColor = { a: 255, b: 230, g: 245, r: 240 };
+const BERRY: RgbaColor = { a: 255, b: 60, g: 50, r: 200 };
 
 function base(overrides: Partial<GenerationConfig>): GenerationConfig {
   return {
@@ -226,6 +229,51 @@ export const BUILTIN_TEMPLATES: readonly BuiltinTemplate[] = [
     description: "Bauhaus rings on a neat grid.",
     id: "bauhaus-rings",
     name: "Bauhaus Rings",
+  },
+  {
+    config: base({
+      backgroundColor: MINT_BG,
+      complexity: 5,
+      density: 8,
+      palette: { colors: [LEAF_GREEN, FOREST, BERRY] },
+      positionJitter: 0.2,
+      primitiveType: "sprig",
+      rotationRange: Math.PI * 2,
+      scale: 0.75,
+    }),
+    description: "Botanical sprigs with berries and blooms.",
+    id: "botanical-sprig",
+    name: "Botanical Sprig",
+  },
+  {
+    config: base({
+      arrangement: "scatter",
+      density: 12,
+      palette: { colors: [LEAF_GREEN, FOREST] },
+      positionJitter: 0.3,
+      primitiveType: "leaf",
+      rotationRange: Math.PI * 2,
+      scale: 0.8,
+    }),
+    description: "Tossed leaves in two greens.",
+    id: "leaf-toss",
+    name: "Leaf Toss",
+  },
+  {
+    config: base({
+      backgroundColor: PAPER,
+      complexity: 8,
+      density: 5,
+      lineThickness: 1.5,
+      palette: { colors: [INK] },
+      positionJitter: 0.15,
+      primitiveType: "flower",
+      rotationRange: Math.PI * 2,
+      scale: 0.6,
+    }),
+    description: "Inky hand-drawn style blooms.",
+    id: "ink-bloom",
+    name: "Ink Bloom",
   },
 ];
 

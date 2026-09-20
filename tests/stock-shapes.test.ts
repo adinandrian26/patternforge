@@ -6,7 +6,9 @@ import {
 } from "@patternforge/core";
 import {
   PATTERN_ALGORITHM_VERSION,
+  PRNG_ALGORITHM_VERSION,
   SCHEMA_VERSION,
+  type EntityId,
 } from "@patternforge/shared";
 import { generatePattern } from "@patternforge/pattern-engine";
 import {
@@ -81,8 +83,15 @@ function checksumOf(pattern: GenerationResult): string {
 }
 
 describe("stock shape validation", () => {
-  it("accepts star/ring/flower/wave types with defaults", () => {
-    for (const primitiveType of ["star", "ring", "flower", "wave"] as const) {
+  it("accepts star/ring/flower/wave/leaf/sprig types with defaults", () => {
+    for (const primitiveType of [
+      "star",
+      "ring",
+      "flower",
+      "wave",
+      "leaf",
+      "sprig",
+    ] as const) {
       const config = validateGenerationConfig({
         ...DEFAULT_GENERATION_CONFIG,
         primitiveType,
@@ -136,7 +145,14 @@ describe("stock shape validation", () => {
 
 describe("stock shape generation", () => {
   it("emits one typed primitive per slot, deterministically", () => {
-    for (const primitiveType of ["star", "ring", "flower", "wave"] as const) {
+    for (const primitiveType of [
+      "star",
+      "ring",
+      "flower",
+      "wave",
+      "leaf",
+      "sprig",
+    ] as const) {
       const first = generateFor("4242", {
         height: 64,
         primitiveType,
@@ -161,6 +177,8 @@ describe("stock shape generation", () => {
       ["ring", "8cbfc1dd"],
       ["flower", "8ee75b44"],
       ["wave", "e5e42324"],
+      ["leaf", "c43b083d"],
+      ["sprig", "fdddb615"],
     ];
     for (const [primitiveType, golden] of cases) {
       const pattern = generateFor("4242", {
@@ -230,7 +248,14 @@ describe("stock shape generation", () => {
 
 describe("stock shape vectors", () => {
   it("serializes new shapes to SVG without strokes", () => {
-    for (const primitiveType of ["star", "ring", "flower", "wave"] as const) {
+    for (const primitiveType of [
+      "star",
+      "ring",
+      "flower",
+      "wave",
+      "leaf",
+      "sprig",
+    ] as const) {
       const pattern = generateFor("4242", {
         height: 64,
         primitiveType,
@@ -275,7 +300,14 @@ describe("stock shape vectors", () => {
   });
 
   it("serializes new shapes to stock-safe EPS", () => {
-    for (const primitiveType of ["star", "ring", "flower", "wave"] as const) {
+    for (const primitiveType of [
+      "star",
+      "ring",
+      "flower",
+      "wave",
+      "leaf",
+      "sprig",
+    ] as const) {
       const pattern = generateFor("4242", {
         height: 64,
         primitiveType,
@@ -311,5 +343,96 @@ describe("stock shape vectors", () => {
       throw new Error("ring eps failed");
     }
     expect(ringEps.value).toContain("eofill");
+  });
+});
+
+describe("botanical details", () => {
+  it("draws leaf lenses with quadratic sides in SVG", () => {
+    const pattern = generateFor("4242", {
+      height: 64,
+      primitiveType: "leaf",
+      width: 64,
+    });
+    const serialized = serializeSvg(pattern, {
+      background: BG,
+      fallbackFill: FG,
+    });
+    if (!serialized.ok) {
+      throw new Error("leaf svg failed");
+    }
+    expect(serialized.value).toContain(" Q0,");
+  });
+
+  it("paints sprig stems, leaves, berries, and accent blooms", () => {
+    const pattern = generateFor("4242", {
+      height: 64,
+      primitiveType: "sprig",
+      width: 64,
+    });
+    const serialized = serializeSvg(pattern, {
+      background: BG,
+      fallbackFill: FG,
+    });
+    if (!serialized.ok) {
+      throw new Error("sprig svg failed");
+    }
+    expect(serialized.value).toContain("<line");
+    expect(serialized.value).toContain("<ellipse");
+    expect(serialized.value).toContain("<circle");
+  });
+
+  it("flattens sprig accent heads to their own sRGB in EPS", () => {
+    const red = { a: 255, b: 0, g: 0, r: 255 };
+    const blue = { a: 255, b: 255, g: 0, r: 0 };
+    const manual: GenerationResult = {
+      algorithmVersion: PATTERN_ALGORITHM_VERSION,
+      effectiveSeed: {
+        algorithmVersion: PRNG_ALGORITHM_VERSION,
+        value: "accent",
+      },
+      height: 64,
+      primitiveCount: 1,
+      primitives: [
+        {
+          accent: blue,
+          berries: [],
+          color: red,
+          flower: {
+            centerRadius: 2,
+            petalLength: 10,
+            petals: 5,
+            petalWidth: 4,
+            x: 0,
+            y: 20,
+          },
+          id: "primitive-000001" as EntityId,
+          leaves: [],
+          opacity: 1,
+          rotation: 0,
+          scale: 1,
+          stemLength: 20,
+          stemThickness: 1.5,
+          type: "sprig",
+          x: 32,
+          y: 22,
+        },
+      ],
+      resultId: "test-accent" as EntityId,
+      schemaVersion: SCHEMA_VERSION,
+      tileable: false,
+      width: 64,
+    };
+    const serialized = serializeEps(manual, {
+      background: BG,
+      fallbackFill: FG,
+      targetHeight: 2000,
+      targetWidth: 2000,
+    });
+    if (!serialized.ok) {
+      throw new Error(`eps failed: ${serialized.error.message}`);
+    }
+    expect(serialized.value).toContain("1 0 0 setrgbcolor");
+    expect(serialized.value).toContain("0 0 1 setrgbcolor");
+    expect(/\bstroke\b/.test(serialized.value)).toBe(false);
   });
 });

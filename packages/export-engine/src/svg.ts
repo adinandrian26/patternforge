@@ -61,15 +61,60 @@ function circleSubpath(radius: number): string {
   );
 }
 
+function fillForColor(
+  color: RgbaColor,
+  opacity: number,
+): { fill: string; fillOpacity: string } {
+  return {
+    fill: colorToHex({ a: 255, b: color.b, g: color.g, r: color.r }),
+    fillOpacity: formatSvgNumber((color.a / 255) * opacity),
+  };
+}
+
 function fillFor(
   primitive: PatternPrimitive,
   fallback: RgbaColor,
 ): { fill: string; fillOpacity: string } {
   const color = primitive.color ?? fallback;
-  return {
-    fill: colorToHex({ a: 255, b: color.b, g: color.g, r: color.r }),
-    fillOpacity: formatSvgNumber((color.a / 255) * primitive.opacity),
-  };
+  return fillForColor(color, primitive.opacity);
+}
+
+/** Leaf lens path in local units (points along +x). */
+function leafPath(length: number, width: number): string {
+  const x1 = formatSvgNumber(-length / 2);
+  const x2 = formatSvgNumber(length / 2);
+  const qy1 = formatSvgNumber(-width);
+  const qy2 = formatSvgNumber(width);
+  return `M${x1},0 Q0,${qy1} ${x2},0 Q0,${qy2} ${x1},0 Z`;
+}
+
+/** Flower head inner shapes at (fx, fy) sharing one paint. */
+function flowerInner(
+  fx: number,
+  fy: number,
+  petals: number,
+  petalLength: number,
+  petalWidth: number,
+  centerRadius: number,
+  paint: string,
+): string {
+  const dist = centerRadius * 0.5 + petalLength / 2;
+  const rx = formatSvgNumber(petalLength / 2);
+  const ry = formatSvgNumber(petalWidth / 2);
+  const d = formatSvgNumber(dist);
+  const x = formatSvgNumber(fx);
+  const y = formatSvgNumber(fy);
+  let inner = "";
+  for (let k = 0; k < petals; k += 1) {
+    const deg = formatSvgNumber((k * 360) / petals);
+    inner +=
+      `<g transform="translate(${x} ${y}) rotate(${deg})">` +
+      `<ellipse cx="${d}" cy="0" rx="${rx}" ry="${ry}"${paint}/></g>`;
+  }
+  inner +=
+    `<circle cx="${x}" cy="${y}" ` +
+    `r="${formatSvgNumber(centerRadius)}"${paint}/>`;
+  return inner;
 }
 
 function shapeFor(primitive: PatternPrimitive, fallback: RgbaColor): string {
@@ -151,28 +196,18 @@ function shapeFor(primitive: PatternPrimitive, fallback: RgbaColor): string {
       );
     }
     case "flower": {
-      const dist = primitive.centerRadius * 0.5 + primitive.petalLength / 2;
-      const rx = formatSvgNumber(primitive.petalLength / 2);
-      const ry = formatSvgNumber(primitive.petalWidth / 2);
-      const d = formatSvgNumber(dist);
-      let inner = "";
-      for (let k = 0; k < primitive.petals; k += 1) {
-        const deg = formatSvgNumber((k * 360) / primitive.petals);
-        inner +=
-          `<g transform="rotate(${deg})">` +
-          `<ellipse cx="${d}" cy="0" rx="${rx}" ry="${ry}"${paint}/></g>`;
-      }
-      inner +=
-        `<circle cx="0" cy="0" ` +
-        `r="${formatSvgNumber(primitive.centerRadius)}"${paint}/>`;
-      return `${gOpen}${inner}</g>`;
+      return `${gOpen}${flowerInner(
+        0,
+        0,
+        primitive.petals,
+        primitive.petalLength,
+        primitive.petalWidth,
+        primitive.centerRadius,
+        paint,
+      )}</g>`;
     }
     case "wave": {
-      const thickness =
-        "thickness" in primitive &&
-        typeof (primitive as { thickness?: unknown }).thickness === "number"
-          ? ((primitive as { thickness?: number }).thickness ?? 1)
-          : 1;
+      const thickness = lineThicknessOf(primitive);
       const points = waveBandPoints(
         primitive.length,
         primitive.amplitude,
@@ -183,7 +218,53 @@ function shapeFor(primitive: PatternPrimitive, fallback: RgbaColor): string {
         .join(" ");
       return `${gOpen}<polygon points="${points}"${paint}/></g>`;
     }
+    case "leaf": {
+      return `${gOpen}<path d="${leafPath(primitive.length, primitive.width)}"${paint}/></g>`;
+    }
+    case "sprig": {
+      const thickness = lineThicknessOf(primitive);
+      const stemLen = formatSvgNumber(primitive.stemLength);
+      let inner =
+        `<line x1="0" y1="0" x2="0" y2="${stemLen}" ` +
+        `stroke="${fill}" stroke-opacity="${fillOpacity}" ` +
+        `stroke-width="${formatSvgNumber(thickness)}" stroke-linecap="round"/>`;
+      for (const leaf of primitive.leaves) {
+        const deg = formatSvgNumber(90 - (leaf.angle * 180) / Math.PI);
+        const y = formatSvgNumber(leaf.along * primitive.stemLength);
+        inner +=
+          `<g transform="translate(0 ${y}) rotate(${deg})">` +
+          `<path d="${leafPath(leaf.length, leaf.width)}"${paint}/></g>`;
+      }
+      for (const berry of primitive.berries) {
+        inner +=
+          `<circle cx="${formatSvgNumber(berry.x)}" ` +
+          `cy="${formatSvgNumber(berry.y)}" ` +
+          `r="${formatSvgNumber(berry.radius)}"${paint}/>`;
+      }
+      if (primitive.flower !== null) {
+        const accent = primitive.accent ?? primitive.color ?? fallback;
+        const accentFill = fillForColor(accent, primitive.opacity);
+        const accentPaint = ` fill="${accentFill.fill}" fill-opacity="${accentFill.fillOpacity}"`;
+        inner += flowerInner(
+          primitive.flower.x,
+          primitive.flower.y,
+          primitive.flower.petals,
+          primitive.flower.petalLength,
+          primitive.flower.petalWidth,
+          primitive.flower.centerRadius,
+          accentPaint,
+        );
+      }
+      return `${gOpen}${inner}</g>`;
+    }
   }
+}
+
+function lineThicknessOf(primitive: PatternPrimitive): number {
+  return "thickness" in primitive &&
+    typeof (primitive as { thickness?: unknown }).thickness === "number"
+    ? ((primitive as { thickness?: number }).thickness ?? 1)
+    : 1;
 }
 
 export interface SvgSerializeOptions {

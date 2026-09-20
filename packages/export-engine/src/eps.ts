@@ -1,6 +1,9 @@
 import { err, ok } from "@patternforge/shared";
 import type { RenderCancellationSignal } from "@patternforge/renderer-engine";
 import {
+  leafCubicEdges,
+  MAX_LINE_THICKNESS,
+  MIN_LINE_THICKNESS,
   starVertices,
   waveBandPoints,
   type GenerationResult,
@@ -175,12 +178,60 @@ function lineThicknessOf(primitive: PatternPrimitive): number {
     : 1;
 }
 
+/** Leaf lens path in local units (points along +x). */
+function leafPath(length: number, width: number): string {
+  const edges = leafCubicEdges(length, width);
+  const f = (v: number): string => formatSvgNumber(v);
+  return (
+    `newpath ${f(-length / 2)} 0 moveto ` +
+    `${f(edges.top.c1x)} ${f(edges.top.c1y)} ` +
+    `${f(edges.top.c2x)} ${f(edges.top.c2y)} ` +
+    `${f(length / 2)} 0 curveto ` +
+    `${f(edges.bottom.c1x)} ${f(edges.bottom.c1y)} ` +
+    `${f(edges.bottom.c2x)} ${f(edges.bottom.c2y)} ` +
+    `${f(-length / 2)} 0 curveto closepath`
+  );
+}
+
+/** Flower head body lines at (fx, fy) sharing the current color. */
+function flowerBody(
+  fx: number,
+  fy: number,
+  petals: number,
+  petalLength: number,
+  petalWidth: number,
+  centerRadius: number,
+): string[] {
+  const dist = centerRadius * 0.5 + petalLength / 2;
+  const lines: string[] = [];
+  for (let k = 0; k < petals; k += 1) {
+    lines.push("gsave");
+    lines.push(`${formatSvgNumber(fx)} ${formatSvgNumber(fy)} translate`);
+    lines.push(`${formatSvgNumber((k * 360) / petals)} rotate`);
+    lines.push(`${formatSvgNumber(dist)} 0 translate`);
+    lines.push(ellipsePath(petalLength / 2, petalWidth / 2));
+    lines.push("fill");
+    lines.push("grestore");
+  }
+  lines.push("gsave");
+  lines.push(`${formatSvgNumber(fx)} ${formatSvgNumber(fy)} translate`);
+  lines.push(circlePath(centerRadius));
+  lines.push("fill");
+  lines.push("grestore");
+  return lines;
+}
+
 /**
- * Shape body lines inside the transformed frame (color is set by the
- * caller). A body always ends with its own paint operator, since nested
+ * Shape body lines inside the transformed frame. `paint` emits a
+ * `setrgbcolor` line for a raw color (flattened by the caller); most
+ * shapes use the frame color, sprig flower heads switch to accent.
+ * A body always ends its subpaths with paint operators, since nested
  * `gsave`/`grestore` frames cannot share one path.
  */
-function shapeBody(primitive: PatternPrimitive): string[] {
+function shapeBody(
+  primitive: PatternPrimitive,
+  paint: (color: RgbaColor) => string,
+): string[] {
   switch (primitive.type) {
     case "circle":
       return isPositive(primitive.radius)
@@ -240,21 +291,14 @@ function shapeBody(primitive: PatternPrimitive): string[] {
       ) {
         return [];
       }
-      const dist = primitive.centerRadius * 0.5 + primitive.petalLength / 2;
-      const lines: string[] = [];
-      for (let k = 0; k < primitive.petals; k += 1) {
-        lines.push("gsave");
-        lines.push(`${formatSvgNumber((k * 360) / primitive.petals)} rotate`);
-        lines.push(`${formatSvgNumber(dist)} 0 translate`);
-        lines.push(
-          ellipsePath(primitive.petalLength / 2, primitive.petalWidth / 2),
-        );
-        lines.push("fill");
-        lines.push("grestore");
-      }
-      lines.push(circlePath(primitive.centerRadius));
-      lines.push("fill");
-      return lines;
+      return flowerBody(
+        0,
+        0,
+        primitive.petals,
+        primitive.petalLength,
+        primitive.petalWidth,
+        primitive.centerRadius,
+      );
     }
     case "wave": {
       const thickness = lineThicknessOf(primitive);
@@ -274,6 +318,73 @@ function shapeBody(primitive: PatternPrimitive): string[] {
         ),
       );
       return path === "" ? [] : [path, "fill"];
+    }
+    case "leaf": {
+      if (!isPositive(primitive.length) || !isPositive(primitive.width)) {
+        return [];
+      }
+      return [leafPath(primitive.length, primitive.width), "fill"];
+    }
+    case "sprig": {
+      if (
+        !isPositive(primitive.stemLength) ||
+        !Number.isFinite(primitive.stemThickness) ||
+        primitive.stemThickness < MIN_LINE_THICKNESS ||
+        primitive.stemThickness > MAX_LINE_THICKNESS ||
+        primitive.leaves.length > 6 ||
+        primitive.berries.length > 6
+      ) {
+        return [];
+      }
+      const lines: string[] = [];
+      lines.push("gsave");
+      lines.push(`0 ${formatSvgNumber(primitive.stemLength / 2)} translate`);
+      lines.push("90 rotate");
+      lines.push(linePath(primitive.stemLength, primitive.stemThickness));
+      lines.push("fill");
+      lines.push("grestore");
+      for (const leaf of primitive.leaves) {
+        if (!isPositive(leaf.length) || !isPositive(leaf.width)) {
+          continue;
+        }
+        lines.push("gsave");
+        lines.push(
+          `0 ${formatSvgNumber(leaf.along * primitive.stemLength)} translate`,
+        );
+        lines.push(
+          `${formatSvgNumber(90 - (leaf.angle * 180) / Math.PI)} rotate`,
+        );
+        lines.push(leafPath(leaf.length, leaf.width));
+        lines.push("fill");
+        lines.push("grestore");
+      }
+      for (const berry of primitive.berries) {
+        if (!isPositive(berry.radius)) {
+          continue;
+        }
+        lines.push("gsave");
+        lines.push(
+          `${formatSvgNumber(berry.x)} ${formatSvgNumber(berry.y)} translate`,
+        );
+        lines.push(circlePath(berry.radius));
+        lines.push("fill");
+        lines.push("grestore");
+      }
+      if (primitive.flower !== null) {
+        const flower = primitive.flower;
+        lines.push(paint(primitive.accent ?? { a: 255, b: 0, g: 0, r: 0 }));
+        for (const bodyLine of flowerBody(
+          flower.x,
+          flower.y,
+          flower.petals,
+          flower.petalLength,
+          flower.petalWidth,
+          flower.centerRadius,
+        )) {
+          lines.push(bodyLine);
+        }
+      }
+      return lines;
     }
   }
 }
@@ -361,18 +472,20 @@ export function serializeEps(
       return err({ code: "CANCELLED", message: "EPS export cancelled." });
     }
     index += 1;
-    const body = shapeBody(primitive);
+    const mix = (color: RgbaColor): { b: number; g: number; r: number } => {
+      const alpha = (color.a / 255) * primitive.opacity;
+      const flat = flattenOver({ ...color, a: 255 }, backdrop);
+      return {
+        b: Math.round(flat.b * alpha + backdrop.b * (1 - alpha)),
+        g: Math.round(flat.g * alpha + backdrop.g * (1 - alpha)),
+        r: Math.round(flat.r * alpha + backdrop.r * (1 - alpha)),
+      };
+    };
+    const body = shapeBody(primitive, (color) => rgbCommand(mix(color)));
     if (body.length === 0) {
       continue;
     }
     const color = primitive.color ?? options.fallbackFill;
-    const alpha = (color.a / 255) * primitive.opacity;
-    const flat = flattenOver({ ...color, a: 255 }, backdrop);
-    const mixed = {
-      b: Math.round(flat.b * alpha + backdrop.b * (1 - alpha)),
-      g: Math.round(flat.g * alpha + backdrop.g * (1 - alpha)),
-      r: Math.round(flat.r * alpha + backdrop.r * (1 - alpha)),
-    };
     lines.push("gsave");
     lines.push(
       `${formatSvgNumber(primitive.x * sx)} ${formatSvgNumber(primitive.y * sy)} translate`,
@@ -383,7 +496,7 @@ export function serializeEps(
     lines.push(
       `${formatSvgNumber(primitive.scale * sx)} ${formatSvgNumber(primitive.scale * sy)} scale`,
     );
-    lines.push(rgbCommand(mixed));
+    lines.push(rgbCommand(mix(color)));
     for (const bodyLine of body) {
       lines.push(bodyLine);
     }

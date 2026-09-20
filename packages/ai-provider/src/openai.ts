@@ -22,7 +22,7 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const SYSTEM_PROMPT =
   "You configure a procedural seamless pattern. Reply with ONLY a JSON " +
   "object using these optional keys: primitiveType (circle|rectangle|" +
-  "ellipse|line|polygon|star|ring|flower|wave), density (1-100), scale (0.1-1), rotationDegrees " +
+  "ellipse|line|polygon|star|ring|flower|wave|leaf|sprig), density (1-100), scale (0.1-1), rotationDegrees " +
   "(0-360), complexity (1-8), positionJitter (0-1), paletteHex (array of " +
   "hex colors like #ff0000, max 8), backgroundHex (hex color). No prose.";
 

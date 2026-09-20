@@ -268,6 +268,8 @@ export function App() {
           <option value="ring">Ring</option>
           <option value="flower">Flower</option>
           <option value="wave">Wave</option>
+          <option value="leaf">Leaf</option>
+          <option value="sprig">Sprig (botanical)</option>
         </select>
       </label>
       <label className="control-group">

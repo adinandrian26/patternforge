@@ -269,6 +269,96 @@ export function validatePrimitive(
       }
       return ok(primitive);
     }
+    case "leaf": {
+      if (
+        !isPositiveFinite(primitive.length) ||
+        primitive.length > MAX_GEOMETRY_EXTENT * 2 ||
+        !isPositiveFinite(primitive.width) ||
+        primitive.width > MAX_GEOMETRY_EXTENT
+      ) {
+        return err(
+          invalidPrimitive(
+            "Leaf length/width must be finite, positive, and bounded.",
+          ),
+        );
+      }
+      return ok(primitive);
+    }
+    case "sprig": {
+      if (
+        !isPositiveFinite(primitive.stemLength) ||
+        primitive.stemLength > MAX_GEOMETRY_EXTENT * 2 ||
+        !isPositiveFinite(primitive.stemThickness) ||
+        primitive.stemThickness < MIN_LINE_THICKNESS ||
+        primitive.stemThickness > MAX_LINE_THICKNESS
+      ) {
+        return err(
+          invalidPrimitive("Sprig stem must be finite, positive, and bounded."),
+        );
+      }
+      if (!Array.isArray(primitive.leaves) || primitive.leaves.length > 6) {
+        return err(invalidPrimitive("Sprig must hold at most 6 leaves."));
+      }
+      for (const leaf of primitive.leaves) {
+        if (
+          !isFiniteNumber(leaf.along) ||
+          leaf.along < 0 ||
+          leaf.along > 1 ||
+          !isFiniteNumber(leaf.angle) ||
+          !isPositiveFinite(leaf.length) ||
+          leaf.length > MAX_GEOMETRY_EXTENT ||
+          !isPositiveFinite(leaf.width) ||
+          leaf.width > MAX_GEOMETRY_EXTENT
+        ) {
+          return err(
+            invalidPrimitive("Sprig leaves must be finite and bounded."),
+          );
+        }
+      }
+      if (!Array.isArray(primitive.berries) || primitive.berries.length > 6) {
+        return err(invalidPrimitive("Sprig must hold at most 6 berries."));
+      }
+      for (const berry of primitive.berries) {
+        if (
+          !isFiniteNumber(berry.x) ||
+          !isFiniteNumber(berry.y) ||
+          Math.abs(berry.x) > MAX_GEOMETRY_EXTENT ||
+          Math.abs(berry.y) > MAX_GEOMETRY_EXTENT ||
+          !isPositiveFinite(berry.radius) ||
+          berry.radius > MAX_GEOMETRY_EXTENT
+        ) {
+          return err(
+            invalidPrimitive("Sprig berries must be finite and bounded."),
+          );
+        }
+      }
+      const flower = primitive.flower;
+      if (flower !== null) {
+        if (
+          !Number.isSafeInteger(flower.petals) ||
+          flower.petals < 3 ||
+          flower.petals > 12 ||
+          !isPositiveFinite(flower.petalLength) ||
+          flower.petalLength > MAX_GEOMETRY_EXTENT ||
+          !isPositiveFinite(flower.petalWidth) ||
+          flower.petalWidth > MAX_GEOMETRY_EXTENT ||
+          !isPositiveFinite(flower.centerRadius) ||
+          flower.centerRadius > MAX_GEOMETRY_EXTENT ||
+          !isFiniteNumber(flower.x) ||
+          !isFiniteNumber(flower.y)
+        ) {
+          return err(
+            invalidPrimitive("Sprig flower must be finite and bounded."),
+          );
+        }
+      }
+      if (primitive.accent !== undefined && !isRgbaColor(primitive.accent)) {
+        return err(
+          invalidPrimitive("Sprig accent must be a valid RGBA color."),
+        );
+      }
+      return ok(primitive);
+    }
     default: {
       return err(invalidPrimitive("Unknown primitive type."));
     }
@@ -393,7 +483,54 @@ export interface RasterizeOutcome {
   readonly cancelled: boolean;
 }
 
-/** Star vertices are shared with the vector serializers (see core). */
+/** Lens test in leaf-local units (leaf points along +x, centered). */
+function testLeafAt(
+  lx: number,
+  ly: number,
+  length: number,
+  width: number,
+): boolean {
+  const half = length / 2;
+  if (Math.abs(lx) > half) {
+    return false;
+  }
+  const t = (2 * lx) / length;
+  const edge = (width / 2) * (1 - t * t);
+  return Math.abs(ly) <= edge;
+}
+
+/** Flower test in flower-local units (centered at origin). */
+function testFlowerAt(
+  lx: number,
+  ly: number,
+  petals: number,
+  petalLength: number,
+  petalWidth: number,
+  centerRadius: number,
+): boolean {
+  if (lx * lx + ly * ly <= centerRadius * centerRadius) {
+    return true;
+  }
+  const dist = centerRadius * 0.5 + petalLength / 2;
+  const halfL = petalLength / 2;
+  const halfW = petalWidth / 2;
+  for (let k = 0; k < petals; k += 1) {
+    const angle = (k * Math.PI * 2) / petals;
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    const relX = lx - dirX * dist;
+    const relY = ly - dirY * dist;
+    const along = relX * dirX + relY * dirY;
+    const across = relX * dirY - relY * dirX;
+    if (
+      (along * along) / (halfL * halfL) + (across * across) / (halfW * halfW) <=
+      1
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function rasterizeLocalPolygon(
   image: RasterImage,
@@ -694,8 +831,6 @@ export function rasterizeSingleCopy(
       if (box === null) {
         return { cancelled: false };
       }
-      const halfL = petalLength / 2;
-      const halfW = petalWidth / 2;
       for (let y = box.y0; y <= box.y1; y += 1) {
         if (signal?.isCancelled() === true) {
           return { cancelled: true };
@@ -705,28 +840,16 @@ export function rasterizeSingleCopy(
           const px = x + 0.5;
           const local = toLocal(px - centerX, py - centerY, frame);
           if (
-            local.x * local.x + local.y * local.y <=
-            centerRadius * centerRadius
+            testFlowerAt(
+              local.x,
+              local.y,
+              petals,
+              petalLength,
+              petalWidth,
+              centerRadius,
+            )
           ) {
             blendPixelAt(image, x, y, foreground, opacity);
-            continue;
-          }
-          for (let k = 0; k < petals; k += 1) {
-            const angle = (k * Math.PI * 2) / petals;
-            const dirX = Math.cos(angle);
-            const dirY = Math.sin(angle);
-            const relX = local.x - dirX * dist;
-            const relY = local.y - dirY * dist;
-            const along = relX * dirX + relY * dirY;
-            const across = relX * dirY - relY * dirX;
-            if (
-              (along * along) / (halfL * halfL) +
-                (across * across) / (halfW * halfW) <=
-              1
-            ) {
-              blendPixelAt(image, x, y, foreground, opacity);
-              break;
-            }
           }
         }
       }
@@ -788,6 +911,121 @@ export function rasterizeSingleCopy(
               blendPixelAt(image, x, y, foreground, opacity);
               break;
             }
+          }
+        }
+      }
+      return { cancelled: false };
+    }
+    case "leaf": {
+      const length = primitive.length * scale;
+      const width = primitive.width * scale;
+      const half = length / 2;
+      const ext = Math.max(half, width / 2) + 1;
+      const box = clampAabb(
+        centerX - ext,
+        centerX + ext,
+        centerY - ext,
+        centerY + ext,
+        image.width,
+        image.height,
+      );
+      if (box === null) {
+        return { cancelled: false };
+      }
+      for (let y = box.y0; y <= box.y1; y += 1) {
+        if (signal?.isCancelled() === true) {
+          return { cancelled: true };
+        }
+        const py = y + 0.5;
+        for (let x = box.x0; x <= box.x1; x += 1) {
+          const px = x + 0.5;
+          const local = toLocal(px - centerX, py - centerY, frame);
+          if (testLeafAt(local.x, local.y, length, width)) {
+            blendPixelAt(image, x, y, foreground, opacity);
+          }
+        }
+      }
+      return { cancelled: false };
+    }
+    case "sprig": {
+      const stemLength = primitive.stemLength * scale;
+      const stemThickness = primitive.stemThickness;
+      const box = clampAabb(
+        centerX - stemLength - 8,
+        centerX + stemLength + 8,
+        centerY - stemLength - 8,
+        centerY + stemLength + 8,
+        image.width,
+        image.height,
+      );
+      if (box === null) {
+        return { cancelled: false };
+      }
+      const radiusSq = (stemThickness / 2) * (stemThickness / 2);
+      const ax = centerX;
+      const ay = centerY;
+      const bx = centerX - sin * stemLength;
+      const by = centerY + cos * stemLength;
+      for (let y = box.y0; y <= box.y1; y += 1) {
+        if (signal?.isCancelled() === true) {
+          return { cancelled: true };
+        }
+        const py = y + 0.5;
+        for (let x = box.x0; x <= box.x1; x += 1) {
+          const px = x + 0.5;
+          if (distanceToSegmentSquared(px, py, ax, ay, bx, by) <= radiusSq) {
+            blendPixelAt(image, x, y, foreground, opacity);
+            continue;
+          }
+          const local = toLocal(px - centerX, py - centerY, frame);
+          const slx = local.x / scale;
+          const sly = local.y / scale;
+          let painted = false;
+          for (const leaf of primitive.leaves) {
+            const baseX = 0;
+            const baseY = leaf.along * primitive.stemLength;
+            const dirX = Math.sin(leaf.angle);
+            const dirY = Math.cos(leaf.angle);
+            const cx = baseX + dirX * (leaf.length / 2);
+            const cy = baseY + dirY * (leaf.length / 2);
+            const relX = slx - cx;
+            const relY = sly - cy;
+            const along = relX * dirX + relY * dirY;
+            const across = relX * dirY - relY * dirX;
+            if (testLeafAt(along, across, leaf.length, leaf.width)) {
+              blendPixelAt(image, x, y, foreground, opacity);
+              painted = true;
+              break;
+            }
+          }
+          if (painted) {
+            continue;
+          }
+          for (const berry of primitive.berries) {
+            const dx = slx - berry.x;
+            const dy = sly - berry.y;
+            if (dx * dx + dy * dy <= berry.radius * berry.radius) {
+              blendPixelAt(image, x, y, foreground, opacity);
+              painted = true;
+              break;
+            }
+          }
+          if (painted) {
+            continue;
+          }
+          const flower = primitive.flower;
+          if (
+            flower !== null &&
+            testFlowerAt(
+              slx - flower.x,
+              sly - flower.y,
+              flower.petals,
+              flower.petalLength,
+              flower.petalWidth,
+              flower.centerRadius,
+            )
+          ) {
+            blendPixelAt(image, x, y, primitive.accent ?? foreground, opacity);
           }
         }
       }

@@ -22,6 +22,8 @@ export const PRIMITIVE_TYPES = [
   "ring",
   "flower",
   "wave",
+  "leaf",
+  "sprig",
 ] as const;
 
 export type PrimitiveType = (typeof PRIMITIVE_TYPES)[number];
@@ -85,6 +87,30 @@ export function waveBandPoints(
     points.push({ x, y: y + halfThickness });
   }
   return points;
+}
+
+export interface LeafCubicEdge {
+  readonly c1x: number;
+  readonly c1y: number;
+  readonly c2x: number;
+  readonly c2y: number;
+}
+
+/**
+ * Cubic bezier controls for a plump leaf lens (tips at +/-length/2 on
+ * the x-axis, quadratic control at (0, -/+width) converted to cubic).
+ * Shared so SVG (`Q`) and EPS (`curveto`) trace the same silhouette.
+ */
+export function leafCubicEdges(
+  length: number,
+  width: number,
+): { bottom: LeafCubicEdge; top: LeafCubicEdge } {
+  const sixth = length / 6;
+  const twoThirds = (width * 2) / 3;
+  return {
+    bottom: { c1x: sixth, c1y: twoThirds, c2x: -sixth, c2y: twoThirds },
+    top: { c1x: -sixth, c1y: -twoThirds, c2x: sixth, c2y: -twoThirds },
+  };
 }
 
 export interface Size {
@@ -380,6 +406,53 @@ export interface Wave extends PatternPrimitiveBase {
   readonly type: "wave";
 }
 
+export interface Leaf extends PatternPrimitiveBase {
+  /** Tip-to-tip length in pixels (points along local +x). */
+  readonly length: number;
+  readonly type: "leaf";
+  readonly width: number;
+}
+
+/** One leaf on a sprig stem (sprig-local units, stem along +y). */
+export interface SprigLeaf {
+  /** Tilt from the stem in radians (signed: side included). */
+  readonly angle: number;
+  /** Position on the stem in 0..1. */
+  readonly along: number;
+  readonly length: number;
+  readonly width: number;
+}
+
+export interface SprigBerry {
+  readonly radius: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface SprigFlower {
+  readonly centerRadius: number;
+  readonly petalLength: number;
+  readonly petals: number;
+  readonly petalWidth: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * Botanical sprig: stem + leaves + optional flower head + berries,
+ * all in sprig-local units (stem from origin up +y). `accent` colors
+ * the flower head; everything else uses the primitive color.
+ */
+export interface Sprig extends PatternPrimitiveBase {
+  readonly accent?: RgbaColor;
+  readonly berries: readonly SprigBerry[];
+  readonly flower: SprigFlower | null;
+  readonly leaves: readonly SprigLeaf[];
+  readonly stemLength: number;
+  readonly stemThickness: number;
+  readonly type: "sprig";
+}
+
 export type PatternPrimitive =
   | Circle
   | Rectangle
@@ -389,7 +462,9 @@ export type PatternPrimitive =
   | Star
   | Ring
   | Flower
-  | Wave;
+  | Wave
+  | Leaf
+  | Sprig;
 export type PatternElement = PatternPrimitive;
 
 export interface ColorPalette {

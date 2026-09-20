@@ -331,6 +331,64 @@ function createPrimitive(
       };
       break;
     }
+    case "leaf":
+      primitive = {
+        ...base,
+        length: size * (0.8 + rng.nextFloat() * 0.8),
+        type: "leaf",
+        width: size * (0.3 + rng.nextFloat() * 0.3),
+      };
+      break;
+    case "sprig": {
+      const stemLength = size * (1.2 + rng.nextFloat() * 0.8);
+      const leafCount = 2 + Math.floor(rng.nextFloat() * 4);
+      const leaves: {
+        along: number;
+        angle: number;
+        length: number;
+        width: number;
+      }[] = [];
+      for (let k = 0; k < leafCount; k += 1) {
+        const side = k % 2 === 0 ? 1 : -1;
+        const leafLength = size * (0.4 + rng.nextFloat() * 0.4);
+        leaves.push({
+          along: 0.25 + rng.nextFloat() * 0.65,
+          angle: side * (0.5 + rng.nextFloat() * 0.5),
+          length: leafLength,
+          width: leafLength * (0.35 + rng.nextFloat() * 0.2),
+        });
+      }
+      const berryCount = Math.floor(rng.nextFloat() * 4);
+      const berries: { radius: number; x: number; y: number }[] = [];
+      for (let k = 0; k < berryCount; k += 1) {
+        berries.push({
+          radius: size * (0.06 + rng.nextFloat() * 0.06),
+          x: (rng.nextFloat() * 2 - 1) * size * 0.3,
+          y: stemLength * (0.55 + rng.nextFloat() * 0.35),
+        });
+      }
+      const hasFlower = rng.nextFloat() < 0.7;
+      const petalLength = size * (0.35 + rng.nextFloat() * 0.25);
+      primitive = {
+        ...base,
+        berries,
+        flower: hasFlower
+          ? {
+              centerRadius: petalLength * 0.25,
+              petalLength,
+              petals: 4 + Math.floor(rng.nextFloat() * 5),
+              petalWidth: petalLength * (0.4 + rng.nextFloat() * 0.2),
+              x: 0,
+              y: stemLength,
+            }
+          : null,
+        leaves,
+        stemLength,
+        stemThickness: options.lineThickness,
+        type: "sprig",
+      };
+      break;
+    }
   }
 
   // Deterministic color selection is the LAST rng consumption per
@@ -342,6 +400,9 @@ function createPrimitive(
       options.colorOrder === "sequential"
         ? (palette.colors[index % palette.colors.length] as RgbaColor)
         : rng.pick(palette.colors);
+    if (primitive.type === "sprig" && primitive.flower !== null) {
+      return { ...primitive, accent: rng.pick(palette.colors), color };
+    }
     return { ...primitive, color };
   }
   return primitive;
