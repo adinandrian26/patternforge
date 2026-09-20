@@ -77,6 +77,14 @@ export function interpretPrompt(prompt: string): PatternIntent {
     hasWord(text, "hexagon")
   ) {
     intent.primitiveType = "polygon";
+  } else if (hasWord(text, "star")) {
+    intent.primitiveType = "star";
+  } else if (hasWord(text, "ring") || hasWord(text, "donut")) {
+    intent.primitiveType = "ring";
+  } else if (hasWord(text, "flower") || hasWord(text, "bloom")) {
+    intent.primitiveType = "flower";
+  } else if (hasWord(text, "wave") || hasWord(text, "zebra")) {
+    intent.primitiveType = "wave";
   }
 
   if (

@@ -57,6 +57,7 @@ export const PALETTE_PRESETS: readonly PalettePreset[] = [
 
 /** Raw form values as held by the UI controls. */
 export interface UiFormState {
+  readonly arrangement: string;
   readonly backgroundHex: string;
   readonly colorOrder: string;
   readonly complexity: number;
@@ -69,6 +70,7 @@ export interface UiFormState {
   readonly paletteId: string;
   readonly positionJitter: number;
   readonly primitiveType: string;
+  readonly rotationBaseDegrees: number;
   readonly rotationDegrees: number;
   readonly scale: number;
   readonly seed: string;
@@ -76,6 +78,7 @@ export interface UiFormState {
 }
 
 export const DEFAULT_UI_FORM: UiFormState = {
+  arrangement: "scatter",
   backgroundHex: "#ffffff",
   colorOrder: "random",
   complexity: DEFAULT_GENERATION_CONFIG.complexity,
@@ -88,6 +91,7 @@ export const DEFAULT_UI_FORM: UiFormState = {
   paletteId: "mono",
   positionJitter: DEFAULT_GENERATION_CONFIG.positionJitter,
   primitiveType: DEFAULT_GENERATION_CONFIG.primitiveType,
+  rotationBaseDegrees: 0,
   rotationDegrees: 180,
   scale: DEFAULT_GENERATION_CONFIG.scale,
   seed: "12345",
@@ -166,6 +170,19 @@ export function normalizeUiForm(
       value: form.rotationDegrees,
     });
   }
+  if (
+    !Number.isFinite(form.rotationBaseDegrees) ||
+    form.rotationBaseDegrees < 0 ||
+    form.rotationBaseDegrees > 360
+  ) {
+    return err({
+      code: "INVALID_ROTATION_BASE",
+      field: "rotationBase",
+      message:
+        "Rotation base must be finite and in the range [0, 360] degrees.",
+      value: form.rotationBaseDegrees,
+    });
+  }
   const background = hexToColor(form.backgroundHex);
   if (!background.ok) {
     return err({
@@ -183,6 +200,7 @@ export function normalizeUiForm(
     return paletteColors;
   }
   return validateGenerationConfig({
+    arrangement: form.arrangement,
     backgroundColor: background.value,
     colorOrder: form.colorOrder,
     complexity: form.complexity,
@@ -194,6 +212,7 @@ export function normalizeUiForm(
     palette: { colors: paletteColors.value },
     positionJitter: form.positionJitter,
     primitiveType: form.primitiveType,
+    rotationBase: degreesToRadians(form.rotationBaseDegrees),
     rotationRange: degreesToRadians(form.rotationDegrees),
     scale: form.scale,
     seed: form.seed,

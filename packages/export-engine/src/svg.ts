@@ -2,6 +2,8 @@ import { err, ok } from "@patternforge/shared";
 import type { RenderCancellationSignal } from "@patternforge/renderer-engine";
 import {
   colorToHex,
+  starVertices,
+  waveBandPoints,
   type GenerationResult,
   type PatternPrimitive,
   type RgbaColor,
@@ -42,6 +44,21 @@ function escapeAttr(value: string): string {
     return "pf-tile-clip";
   }
   return value;
+}
+
+/** Circle as an SVG path (for even-odd ring holes). */
+function circleSubpath(radius: number): string {
+  const kappa = 0.5522847498;
+  const r = formatSvgNumber(radius);
+  const k = formatSvgNumber(radius * kappa);
+  const nk = formatSvgNumber(-radius * kappa);
+  const nr = formatSvgNumber(-radius);
+  return (
+    `M${r},0 C${r},${k} ${k},${r} 0,${r} ` +
+    `C${nk},${r} ${nr},${k} ${nr},0 ` +
+    `C${nr},${nk} ${nk},${nr} 0,${nr} ` +
+    `C${k},${nr} ${r},${nk} ${r},0 Z`
+  );
 }
 
 function fillFor(
@@ -101,6 +118,67 @@ function shapeFor(primitive: PatternPrimitive, fallback: RgbaColor): string {
     }
     case "polygon": {
       const points = primitive.points
+        .map((p) => `${formatSvgNumber(p.x)},${formatSvgNumber(p.y)}`)
+        .join(" ");
+      return `${gOpen}<polygon points="${points}"${paint}/></g>`;
+    }
+    case "star": {
+      const points = starVertices(
+        primitive.spikes,
+        primitive.radius,
+        primitive.innerRadius,
+      )
+        .map((p) => `${formatSvgNumber(p.x)},${formatSvgNumber(p.y)}`)
+        .join(" ");
+      return `${gOpen}<polygon points="${points}"${paint}/></g>`;
+    }
+    case "ring": {
+      const thickness =
+        "thickness" in primitive &&
+        typeof (primitive as { thickness?: unknown }).thickness === "number"
+          ? ((primitive as { thickness?: number }).thickness ?? 1)
+          : 1;
+      const inner = primitive.radius - thickness;
+      if (!(inner > 0)) {
+        return (
+          `${gOpen}<circle cx="0" cy="0" ` +
+          `r="${formatSvgNumber(primitive.radius)}"${paint}/></g>`
+        );
+      }
+      return (
+        `${gOpen}<path d="${circleSubpath(primitive.radius)} ` +
+        `${circleSubpath(inner)}" fill-rule="evenodd"${paint}/></g>`
+      );
+    }
+    case "flower": {
+      const dist = primitive.centerRadius * 0.5 + primitive.petalLength / 2;
+      const rx = formatSvgNumber(primitive.petalLength / 2);
+      const ry = formatSvgNumber(primitive.petalWidth / 2);
+      const d = formatSvgNumber(dist);
+      let inner = "";
+      for (let k = 0; k < primitive.petals; k += 1) {
+        const deg = formatSvgNumber((k * 360) / primitive.petals);
+        inner +=
+          `<g transform="rotate(${deg})">` +
+          `<ellipse cx="${d}" cy="0" rx="${rx}" ry="${ry}"${paint}/></g>`;
+      }
+      inner +=
+        `<circle cx="0" cy="0" ` +
+        `r="${formatSvgNumber(primitive.centerRadius)}"${paint}/>`;
+      return `${gOpen}${inner}</g>`;
+    }
+    case "wave": {
+      const thickness =
+        "thickness" in primitive &&
+        typeof (primitive as { thickness?: unknown }).thickness === "number"
+          ? ((primitive as { thickness?: number }).thickness ?? 1)
+          : 1;
+      const points = waveBandPoints(
+        primitive.length,
+        primitive.amplitude,
+        primitive.wavelength,
+        thickness,
+      )
         .map((p) => `${formatSvgNumber(p.x)},${formatSvgNumber(p.y)}`)
         .join(" ");
       return `${gOpen}<polygon points="${points}"${paint}/></g>`;

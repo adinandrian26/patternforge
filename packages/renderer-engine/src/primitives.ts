@@ -3,6 +3,7 @@ import {
   isRgbaColor,
   MAX_LINE_THICKNESS,
   MIN_LINE_THICKNESS,
+  starVertices,
   type PatternPrimitive,
 } from "@patternforge/core";
 
@@ -166,6 +167,108 @@ export function validatePrimitive(
       }
       return ok(primitive);
     }
+    case "star": {
+      if (
+        !Number.isSafeInteger(primitive.spikes) ||
+        primitive.spikes < 3 ||
+        primitive.spikes > 12
+      ) {
+        return err(
+          invalidPrimitive("Star spikes must be an integer in 3..12."),
+        );
+      }
+      if (
+        !isPositiveFinite(primitive.radius) ||
+        primitive.radius > MAX_GEOMETRY_EXTENT ||
+        !isPositiveFinite(primitive.innerRadius) ||
+        primitive.innerRadius > MAX_GEOMETRY_EXTENT
+      ) {
+        return err(
+          invalidPrimitive("Star radii must be finite, positive, and bounded."),
+        );
+      }
+      return ok(primitive);
+    }
+    case "ring": {
+      if (
+        !isPositiveFinite(primitive.radius) ||
+        primitive.radius > MAX_GEOMETRY_EXTENT
+      ) {
+        return err(
+          invalidPrimitive(
+            "Ring radius must be finite, positive, and bounded.",
+          ),
+        );
+      }
+      if (
+        primitive.thickness !== undefined &&
+        (!isFiniteNumber(primitive.thickness) ||
+          primitive.thickness < MIN_LINE_THICKNESS ||
+          primitive.thickness > MAX_LINE_THICKNESS)
+      ) {
+        return err(
+          invalidPrimitive(
+            `Ring thickness must be finite in ${MIN_LINE_THICKNESS}..${MAX_LINE_THICKNESS}.`,
+          ),
+        );
+      }
+      return ok(primitive);
+    }
+    case "flower": {
+      if (
+        !Number.isSafeInteger(primitive.petals) ||
+        primitive.petals < 3 ||
+        primitive.petals > 12
+      ) {
+        return err(
+          invalidPrimitive("Flower petals must be an integer in 3..12."),
+        );
+      }
+      if (
+        !isPositiveFinite(primitive.petalLength) ||
+        primitive.petalLength > MAX_GEOMETRY_EXTENT ||
+        !isPositiveFinite(primitive.petalWidth) ||
+        primitive.petalWidth > MAX_GEOMETRY_EXTENT ||
+        !isPositiveFinite(primitive.centerRadius) ||
+        primitive.centerRadius > MAX_GEOMETRY_EXTENT
+      ) {
+        return err(
+          invalidPrimitive(
+            "Flower sizes must be finite, positive, and bounded.",
+          ),
+        );
+      }
+      return ok(primitive);
+    }
+    case "wave": {
+      if (
+        !isPositiveFinite(primitive.length) ||
+        primitive.length > MAX_GEOMETRY_EXTENT * 2 ||
+        !isPositiveFinite(primitive.amplitude) ||
+        primitive.amplitude > MAX_GEOMETRY_EXTENT ||
+        !isPositiveFinite(primitive.wavelength) ||
+        primitive.wavelength > MAX_GEOMETRY_EXTENT * 2
+      ) {
+        return err(
+          invalidPrimitive(
+            "Wave length/amplitude/wavelength must be finite, positive, and bounded.",
+          ),
+        );
+      }
+      if (
+        primitive.thickness !== undefined &&
+        (!isFiniteNumber(primitive.thickness) ||
+          primitive.thickness < MIN_LINE_THICKNESS ||
+          primitive.thickness > MAX_LINE_THICKNESS)
+      ) {
+        return err(
+          invalidPrimitive(
+            `Wave thickness must be finite in ${MIN_LINE_THICKNESS}..${MAX_LINE_THICKNESS}.`,
+          ),
+        );
+      }
+      return ok(primitive);
+    }
     default: {
       return err(invalidPrimitive("Unknown primitive type."));
     }
@@ -288,6 +391,65 @@ function blendPixelAt(
 
 export interface RasterizeOutcome {
   readonly cancelled: boolean;
+}
+
+/** Star vertices are shared with the vector serializers (see core). */
+
+function rasterizeLocalPolygon(
+  image: RasterImage,
+  primitive: PatternPrimitive,
+  foreground: RgbaColor,
+  centerX: number,
+  centerY: number,
+  localPoints: readonly { x: number; y: number }[],
+  signal?: RenderCancellationSignal,
+): RasterizeOutcome {
+  const cos = Math.cos(primitive.rotation);
+  const sin = Math.sin(primitive.rotation);
+  const scale = primitive.scale;
+  const opacity = primitive.opacity;
+  const vertices = localPoints.map((p) => {
+    const sx = p.x * scale;
+    const sy = p.y * scale;
+    return {
+      x: sx * cos - sy * sin + centerX,
+      y: sx * sin + sy * cos + centerY,
+    };
+  });
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const v of vertices) {
+    minX = Math.min(minX, v.x);
+    maxX = Math.max(maxX, v.x);
+    minY = Math.min(minY, v.y);
+    maxY = Math.max(maxY, v.y);
+  }
+  const box = clampAabb(
+    minX - 1,
+    maxX + 1,
+    minY - 1,
+    maxY + 1,
+    image.width,
+    image.height,
+  );
+  if (box === null) {
+    return { cancelled: false };
+  }
+  for (let y = box.y0; y <= box.y1; y += 1) {
+    if (signal?.isCancelled() === true) {
+      return { cancelled: true };
+    }
+    const py = y + 0.5;
+    for (let x = box.x0; x <= box.x1; x += 1) {
+      const px = x + 0.5;
+      if (pointInPolygon(px, py, vertices)) {
+        blendPixelAt(image, x, y, foreground, opacity);
+      }
+    }
+  }
+  return { cancelled: false };
 }
 
 /**
@@ -459,35 +621,44 @@ export function rasterizeSingleCopy(
       return { cancelled: false };
     }
     case "polygon": {
-      const vertices = primitive.points.map((p) => {
-        const sx = p.x * scale;
-        const sy = p.y * scale;
-        return {
-          x: sx * cos - sy * sin + centerX,
-          y: sx * sin + sy * cos + centerY,
-        };
-      });
-      let minX = Number.POSITIVE_INFINITY;
-      let maxX = Number.NEGATIVE_INFINITY;
-      let minY = Number.POSITIVE_INFINITY;
-      let maxY = Number.NEGATIVE_INFINITY;
-      for (const v of vertices) {
-        minX = Math.min(minX, v.x);
-        maxX = Math.max(maxX, v.x);
-        minY = Math.min(minY, v.y);
-        maxY = Math.max(maxY, v.y);
-      }
+      return rasterizeLocalPolygon(
+        image,
+        primitive,
+        foreground,
+        centerX,
+        centerY,
+        primitive.points,
+        signal,
+      );
+    }
+    case "star": {
+      return rasterizeLocalPolygon(
+        image,
+        primitive,
+        foreground,
+        centerX,
+        centerY,
+        starVertices(primitive.spikes, primitive.radius, primitive.innerRadius),
+        signal,
+      );
+    }
+    case "ring": {
+      const outer = primitive.radius * scale;
+      const thickness = primitive.thickness ?? DEFAULT_LINE_THICKNESS;
+      const inner = outer - thickness;
       const box = clampAabb(
-        minX - 1,
-        maxX + 1,
-        minY - 1,
-        maxY + 1,
+        centerX - outer,
+        centerX + outer,
+        centerY - outer,
+        centerY + outer,
         image.width,
         image.height,
       );
       if (box === null) {
         return { cancelled: false };
       }
+      const outerSq = outer * outer;
+      const innerSq = inner > 0 ? inner * inner : 0;
       for (let y = box.y0; y <= box.y1; y += 1) {
         if (signal?.isCancelled() === true) {
           return { cancelled: true };
@@ -495,8 +666,128 @@ export function rasterizeSingleCopy(
         const py = y + 0.5;
         for (let x = box.x0; x <= box.x1; x += 1) {
           const px = x + 0.5;
-          if (pointInPolygon(px, py, vertices)) {
+          const dx = px - centerX;
+          const dy = py - centerY;
+          const distSq = dx * dx + dy * dy;
+          if (distSq <= outerSq && distSq > innerSq) {
             blendPixelAt(image, x, y, foreground, opacity);
+          }
+        }
+      }
+      return { cancelled: false };
+    }
+    case "flower": {
+      const petals = primitive.petals;
+      const petalLength = primitive.petalLength * scale;
+      const petalWidth = primitive.petalWidth * scale;
+      const centerRadius = primitive.centerRadius * scale;
+      const dist = centerRadius * 0.5 + petalLength / 2;
+      const bound = dist + petalLength / 2 + 1;
+      const box = clampAabb(
+        centerX - bound,
+        centerX + bound,
+        centerY - bound,
+        centerY + bound,
+        image.width,
+        image.height,
+      );
+      if (box === null) {
+        return { cancelled: false };
+      }
+      const halfL = petalLength / 2;
+      const halfW = petalWidth / 2;
+      for (let y = box.y0; y <= box.y1; y += 1) {
+        if (signal?.isCancelled() === true) {
+          return { cancelled: true };
+        }
+        const py = y + 0.5;
+        for (let x = box.x0; x <= box.x1; x += 1) {
+          const px = x + 0.5;
+          const local = toLocal(px - centerX, py - centerY, frame);
+          if (
+            local.x * local.x + local.y * local.y <=
+            centerRadius * centerRadius
+          ) {
+            blendPixelAt(image, x, y, foreground, opacity);
+            continue;
+          }
+          for (let k = 0; k < petals; k += 1) {
+            const angle = (k * Math.PI * 2) / petals;
+            const dirX = Math.cos(angle);
+            const dirY = Math.sin(angle);
+            const relX = local.x - dirX * dist;
+            const relY = local.y - dirY * dist;
+            const along = relX * dirX + relY * dirY;
+            const across = relX * dirY - relY * dirX;
+            if (
+              (along * along) / (halfL * halfL) +
+                (across * across) / (halfW * halfW) <=
+              1
+            ) {
+              blendPixelAt(image, x, y, foreground, opacity);
+              break;
+            }
+          }
+        }
+      }
+      return { cancelled: false };
+    }
+    case "wave": {
+      const length = primitive.length * scale;
+      const amplitude = primitive.amplitude * scale;
+      const wavelength = primitive.wavelength * scale;
+      const thickness = primitive.thickness ?? DEFAULT_LINE_THICKNESS;
+      const half = length / 2;
+      const segments = 32;
+      const ext = half + amplitude + thickness;
+      const box = clampAabb(
+        centerX - ext,
+        centerX + ext,
+        centerY - ext,
+        centerY + ext,
+        image.width,
+        image.height,
+      );
+      if (box === null) {
+        return { cancelled: false };
+      }
+      const xs: number[] = [];
+      const ys: number[] = [];
+      for (let i = 0; i <= segments; i += 1) {
+        const lx = -half + (length * i) / segments;
+        xs.push(
+          lx * cos +
+            centerX -
+            amplitude * Math.sin((Math.PI * 2 * lx) / wavelength) * sin,
+        );
+        ys.push(
+          lx * sin +
+            centerY +
+            amplitude * Math.sin((Math.PI * 2 * lx) / wavelength) * cos,
+        );
+      }
+      const radiusSq = (thickness / 2) * (thickness / 2);
+      for (let y = box.y0; y <= box.y1; y += 1) {
+        if (signal?.isCancelled() === true) {
+          return { cancelled: true };
+        }
+        const py = y + 0.5;
+        for (let x = box.x0; x <= box.x1; x += 1) {
+          const px = x + 0.5;
+          for (let i = 0; i < segments; i += 1) {
+            if (
+              distanceToSegmentSquared(
+                px,
+                py,
+                xs[i] ?? 0,
+                ys[i] ?? 0,
+                xs[i + 1] ?? 0,
+                ys[i + 1] ?? 0,
+              ) <= radiusSq
+            ) {
+              blendPixelAt(image, x, y, foreground, opacity);
+              break;
+            }
           }
         }
       }

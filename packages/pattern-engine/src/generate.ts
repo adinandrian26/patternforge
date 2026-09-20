@@ -110,6 +110,8 @@ function createPrimitiveId(index: number): EntityId {
 
 function createBase(
   id: EntityId,
+  index: number,
+  primitiveCount: number,
   parameters: PatternParameters,
   rng: Rng,
   dimensions: Size,
@@ -132,14 +134,58 @@ function createBase(
       ? opacityMin
       : opacityMin + rng.nextFloat() * (opacityMax - opacityMin);
 
+  // rotationBase shifts the whole design (0 keeps legacy output identical).
+  const rotation =
+    parameters.rotationBase + signedRandom(rng, parameters.rotationRange);
+  // Per-primitive variation around the configured scale, clamped to
+  // (0, 1] so that scale: 1 configs stay renderable (the renderer
+  // validates scale in that range). No extra rng draws.
+  const scale = Math.min(1, parameters.scale * (0.75 + rng.nextFloat() * 0.5));
+
+  if (parameters.arrangement === "grid") {
+    const cols = Math.max(
+      1,
+      Math.round(
+        Math.sqrt((primitiveCount * dimensions.width) / dimensions.height),
+      ),
+    );
+    const rows = Math.max(1, Math.ceil(primitiveCount / cols));
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+    return {
+      id,
+      opacity,
+      rotation,
+      scale,
+      x:
+        ((col + 0.5) * dimensions.width) / cols +
+        signedRandom(rng, jitterRadius),
+      y:
+        ((row + 0.5) * dimensions.height) / rows +
+        signedRandom(rng, jitterRadius),
+    };
+  }
+
+  if (parameters.arrangement === "rows") {
+    const rows = Math.max(1, Math.round(Math.sqrt(primitiveCount) / 2));
+    const row = index % rows;
+    return {
+      id,
+      opacity,
+      rotation,
+      scale,
+      x: rng.nextFloat() * dimensions.width + signedRandom(rng, jitterRadius),
+      y:
+        ((row + 0.5) * dimensions.height) / rows +
+        signedRandom(rng, jitterRadius),
+    };
+  }
+
   return {
     id,
     opacity,
-    rotation: signedRandom(rng, parameters.rotationRange),
-    // Per-primitive variation around the configured scale, clamped to
-    // (0, 1] so that scale: 1 configs stay renderable (the renderer
-    // validates scale in that range). No extra rng draws.
-    scale: Math.min(1, parameters.scale * (0.75 + rng.nextFloat() * 0.5)),
+    rotation,
+    scale,
     x: rng.nextFloat() * dimensions.width + signedRandom(rng, jitterRadius),
     y: rng.nextFloat() * dimensions.height + signedRandom(rng, jitterRadius),
   };
@@ -167,6 +213,7 @@ function createPolygonPoints(
 
 function createPrimitive(
   index: number,
+  primitiveCount: number,
   parameters: PatternParameters,
   dimensions: Size,
   rng: Rng,
@@ -175,6 +222,8 @@ function createPrimitive(
 ): PatternPrimitive {
   const base = createBase(
     createPrimitiveId(index),
+    index,
+    primitiveCount,
     parameters,
     rng,
     dimensions,
@@ -232,6 +281,56 @@ function createPrimitive(
         type: "polygon",
       };
       break;
+    case "star": {
+      const spikes = Math.min(10, Math.max(5, parameters.complexity + 2));
+      const radius = size * (0.6 + rng.nextFloat() * 0.8);
+      primitive = {
+        ...base,
+        innerRadius: radius * (0.4 + rng.nextFloat() * 0.25),
+        radius,
+        spikes,
+        type: "star",
+      };
+      break;
+    }
+    case "ring": {
+      const radius = size * (0.6 + rng.nextFloat() * 0.8);
+      primitive = {
+        ...base,
+        radius,
+        thickness: Math.min(options.lineThickness, radius * 0.8),
+        type: "ring",
+      };
+      break;
+    }
+    case "flower": {
+      const petals =
+        3 +
+        Math.floor(rng.nextFloat() * Math.min(parameters.complexity + 1, 8));
+      const petalLength = size * (0.8 + rng.nextFloat() * 0.5);
+      primitive = {
+        ...base,
+        centerRadius: petalLength * (0.2 + rng.nextFloat() * 0.1),
+        petalLength,
+        petals,
+        petalWidth: petalLength * (0.35 + rng.nextFloat() * 0.25),
+        type: "flower",
+      };
+      break;
+    }
+    case "wave": {
+      const length = size * (1 + rng.nextFloat() * 2);
+      const waves = 1 + Math.floor(rng.nextFloat() * 3);
+      primitive = {
+        ...base,
+        amplitude: size * (0.15 + rng.nextFloat() * 0.25),
+        length,
+        thickness: options.lineThickness,
+        type: "wave",
+        wavelength: length / waves,
+      };
+      break;
+    }
   }
 
   // Deterministic color selection is the LAST rng consumption per
@@ -285,6 +384,12 @@ function createResultId(
   }
   if (options.colorOrder !== "random") {
     segments.push(`co-${options.colorOrder}`);
+  }
+  if (parameters.arrangement !== "scatter") {
+    segments.push(`ar-${parameters.arrangement}`);
+  }
+  if (parameters.rotationBase !== 0) {
+    segments.push(`rb-${parameters.rotationBase}`);
   }
   return segments.join("-") as EntityId;
 }
@@ -387,6 +492,7 @@ export function generatePattern(
     primitives.push(
       createPrimitive(
         index,
+        primitiveCount,
         parameters,
         input.dimensions,
         rng,

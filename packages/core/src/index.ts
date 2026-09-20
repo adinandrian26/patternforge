@@ -18,13 +18,73 @@ export const PRIMITIVE_TYPES = [
   "ellipse",
   "line",
   "polygon",
+  "star",
+  "ring",
+  "flower",
+  "wave",
 ] as const;
 
 export type PrimitiveType = (typeof PRIMITIVE_TYPES)[number];
 
+/** Placement strategy: free scatter, lattice grid, or horizontal rows. */
+export const ARRANGEMENTS = ["scatter", "grid", "rows"] as const;
+
+export type Arrangement = (typeof ARRANGEMENTS)[number];
+
+export function isArrangement(value: unknown): value is Arrangement {
+  return value === "scatter" || value === "grid" || value === "rows";
+}
+
 export interface Point {
   readonly x: number;
   readonly y: number;
+}
+
+/** Star vertices in local units, alternating outer/inner, starting top. */
+export function starVertices(
+  spikes: number,
+  outerRadius: number,
+  innerRadius: number,
+): Point[] {
+  const vertices: Point[] = [];
+  for (let i = 0; i < spikes * 2; i += 1) {
+    const angle = -Math.PI / 2 + (i * Math.PI) / spikes;
+    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+    vertices.push({
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+    });
+  }
+  return vertices;
+}
+
+/** Sample count per wave band edge (band polygon holds 2 * (n + 1) points). */
+export const WAVE_BAND_SEGMENTS = 24;
+
+/**
+ * Filled sine band in local units: top edge left-to-right, then bottom
+ * edge right-to-left. Shared by raster-adjacent serializers so SVG and
+ * EPS render the same silhouette.
+ */
+export function waveBandPoints(
+  length: number,
+  amplitude: number,
+  wavelength: number,
+  thickness: number,
+): Point[] {
+  const points: Point[] = [];
+  const halfThickness = thickness / 2;
+  for (let i = 0; i <= WAVE_BAND_SEGMENTS; i += 1) {
+    const x = -length / 2 + (length * i) / WAVE_BAND_SEGMENTS;
+    const y = amplitude * Math.sin((Math.PI * 2 * x) / wavelength);
+    points.push({ x, y: y - halfThickness });
+  }
+  for (let i = WAVE_BAND_SEGMENTS; i >= 0; i -= 1) {
+    const x = -length / 2 + (length * i) / WAVE_BAND_SEGMENTS;
+    const y = amplitude * Math.sin((Math.PI * 2 * x) / wavelength);
+    points.push({ x, y: y + halfThickness });
+  }
+  return points;
 }
 
 export interface Size {
@@ -43,23 +103,27 @@ export interface Transform {
 }
 
 export interface PatternParameters {
+  readonly arrangement: Arrangement;
   readonly canvasHeight: number;
   readonly canvasWidth: number;
   readonly complexity: number;
   readonly density: number;
   readonly positionJitter: number;
   readonly primitiveType: PrimitiveType;
+  readonly rotationBase: number;
   readonly rotationRange: number;
   readonly scale: number;
 }
 
 export interface PatternParametersInput {
+  readonly arrangement?: unknown;
   readonly canvasHeight: number;
   readonly canvasWidth: number;
   readonly complexity: number;
   readonly density: number;
   readonly positionJitter: number;
   readonly primitiveType: string;
+  readonly rotationBase?: unknown;
   readonly rotationRange: number;
   readonly scale: number;
 }
@@ -67,12 +131,14 @@ export interface PatternParametersInput {
 export type PatternParameterField = keyof PatternParametersInput;
 
 export type PatternValidationCode =
+  | "INVALID_ARRANGEMENT"
   | "INVALID_CANVAS_HEIGHT"
   | "INVALID_CANVAS_WIDTH"
   | "INVALID_COMPLEXITY"
   | "INVALID_DENSITY"
   | "INVALID_POSITION_JITTER"
   | "INVALID_PRIMITIVE_TYPE"
+  | "INVALID_ROTATION_BASE"
   | "INVALID_ROTATION_RANGE"
   | "INVALID_SCALE";
 
@@ -206,7 +272,37 @@ export function validatePatternParameters(
     );
   }
 
-  return ok({ ...parameters, primitiveType: parameters.primitiveType });
+  const arrangement = parameters.arrangement ?? "scatter";
+  if (!isArrangement(arrangement)) {
+    return invalidParameter(
+      "arrangement",
+      "INVALID_ARRANGEMENT",
+      `arrangement must be one of: ${ARRANGEMENTS.join(", ")}.`,
+      typeof arrangement === "string" ? arrangement : null,
+    );
+  }
+
+  const rotationBase = parameters.rotationBase ?? 0;
+  if (
+    typeof rotationBase !== "number" ||
+    !Number.isFinite(rotationBase) ||
+    rotationBase < 0 ||
+    rotationBase > MAX_ROTATION_RANGE
+  ) {
+    return invalidParameter(
+      "rotationBase",
+      "INVALID_ROTATION_BASE",
+      `rotationBase must be finite and in the range [0, ${MAX_ROTATION_RANGE}].`,
+      typeof rotationBase === "number" ? rotationBase : null,
+    );
+  }
+
+  return ok({
+    ...parameters,
+    arrangement,
+    primitiveType: parameters.primitiveType,
+    rotationBase,
+  });
 }
 
 export interface PatternPrimitiveBase {
@@ -249,7 +345,51 @@ export interface Polygon extends PatternPrimitiveBase {
   readonly type: "polygon";
 }
 
-export type PatternPrimitive = Circle | Rectangle | Ellipse | Line | Polygon;
+export interface Star extends PatternPrimitiveBase {
+  /** Inner radius; outer radius is `radius`. Spikes in 3..12. */
+  readonly innerRadius: number;
+  readonly radius: number;
+  readonly spikes: number;
+  readonly type: "star";
+}
+
+export interface Ring extends PatternPrimitiveBase {
+  readonly radius: number;
+  /** Band thickness in pixels; defaults to 1 when absent. */
+  readonly thickness?: number;
+  readonly type: "ring";
+}
+
+export interface Flower extends PatternPrimitiveBase {
+  readonly centerRadius: number;
+  readonly petalLength: number;
+  /** Petal count in 3..12. */
+  readonly petals: number;
+  readonly petalWidth: number;
+  readonly type: "flower";
+}
+
+export interface Wave extends PatternPrimitiveBase {
+  /** Sine amplitude in pixels. */
+  readonly amplitude: number;
+  readonly length: number;
+  /** Band thickness in pixels; defaults to 1 when absent. */
+  readonly thickness?: number;
+  /** Wavelength in pixels (one full sine period). */
+  readonly wavelength: number;
+  readonly type: "wave";
+}
+
+export type PatternPrimitive =
+  | Circle
+  | Rectangle
+  | Ellipse
+  | Line
+  | Polygon
+  | Star
+  | Ring
+  | Flower
+  | Wave;
 export type PatternElement = PatternPrimitive;
 
 export interface ColorPalette {
@@ -366,6 +506,7 @@ export type ColorValidationCode =
   | "INVALID_BACKGROUND";
 
 export type GenerationConfigField =
+  | "arrangement"
   | "backgroundColor"
   | "colorOrder"
   | "complexity"
@@ -377,12 +518,14 @@ export type GenerationConfigField =
   | "palette"
   | "positionJitter"
   | "primitiveType"
+  | "rotationBase"
   | "rotationRange"
   | "scale"
   | "seed"
   | "width";
 
 export type GenerationConfigCode =
+  | "INVALID_ARRANGEMENT"
   | "INVALID_BACKGROUND"
   | "INVALID_COLOR_ORDER"
   | "INVALID_COMPLEXITY"
@@ -394,6 +537,7 @@ export type GenerationConfigCode =
   | "INVALID_POSITION_JITTER"
   | "INVALID_PRIMITIVE_TYPE"
   | "INVALID_ROTATION"
+  | "INVALID_ROTATION_BASE"
   | "INVALID_SCALE"
   | "INVALID_SEED"
   | "INVALID_WIDTH";
@@ -433,6 +577,7 @@ export interface GenerationConfigError {
  * `lineThickness: 1`, `opacityMin/Max: 1`, `colorOrder: "random"`.
  */
 export interface GenerationConfig {
+  readonly arrangement: Arrangement;
   readonly backgroundColor: RgbaColor;
   readonly colorOrder: ColorOrder;
   readonly complexity: number;
@@ -444,6 +589,7 @@ export interface GenerationConfig {
   readonly palette: Palette;
   readonly positionJitter: number;
   readonly primitiveType: PrimitiveType;
+  readonly rotationBase: number;
   readonly rotationRange: number;
   readonly scale: number;
   readonly seed: number | string;
@@ -456,6 +602,7 @@ export interface GenerationConfig {
  * seed, palette, and background accept unknown runtime values.
  */
 export interface GenerationConfigInput {
+  readonly arrangement?: unknown;
   readonly backgroundColor: unknown;
   readonly colorOrder: unknown;
   readonly complexity: number;
@@ -467,6 +614,7 @@ export interface GenerationConfigInput {
   readonly palette: unknown;
   readonly positionJitter: number;
   readonly primitiveType: string;
+  readonly rotationBase?: unknown;
   readonly rotationRange: number;
   readonly scale: number;
   readonly seed: unknown;
@@ -474,6 +622,7 @@ export interface GenerationConfigInput {
 }
 
 export const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
+  arrangement: "scatter",
   backgroundColor: DEFAULT_BACKGROUND_COLOR,
   colorOrder: "random",
   complexity: 3,
@@ -485,6 +634,7 @@ export const DEFAULT_GENERATION_CONFIG: GenerationConfig = {
   palette: { colors: DEFAULT_PALETTE_COLORS },
   positionJitter: 0.1,
   primitiveType: "circle",
+  rotationBase: 0,
   rotationRange: Math.PI,
   scale: 0.5,
   seed: "12345",
@@ -861,6 +1011,29 @@ export function validateGenerationConfig(
       input.primitiveType,
     );
   }
+  const arrangement = input.arrangement ?? "scatter";
+  if (!isArrangement(arrangement)) {
+    return configError(
+      "arrangement",
+      "INVALID_ARRANGEMENT",
+      `arrangement must be one of: ${ARRANGEMENTS.join(", ")}.`,
+      typeof arrangement === "string" ? arrangement : null,
+    );
+  }
+  const rotationBase = input.rotationBase ?? 0;
+  if (
+    typeof rotationBase !== "number" ||
+    !Number.isFinite(rotationBase) ||
+    rotationBase < 0 ||
+    rotationBase > MAX_ROTATION_RANGE
+  ) {
+    return configError(
+      "rotationBase",
+      "INVALID_ROTATION_BASE",
+      `rotationBase must be finite and in the range [0, ${MAX_ROTATION_RANGE}].`,
+      typeof rotationBase === "number" ? rotationBase : null,
+    );
+  }
   const paletteResult = validatePalette(input.palette);
   if (!paletteResult.ok) {
     return err({
@@ -889,6 +1062,7 @@ export function validateGenerationConfig(
     return optionsResult;
   }
   return ok({
+    arrangement,
     backgroundColor: backgroundResult.value,
     colorOrder: optionsResult.value.colorOrder,
     complexity: input.complexity,
@@ -900,6 +1074,7 @@ export function validateGenerationConfig(
     palette: paletteResult.value,
     positionJitter: input.positionJitter,
     primitiveType: input.primitiveType,
+    rotationBase,
     rotationRange: input.rotationRange,
     scale: input.scale,
     seed: input.seed,

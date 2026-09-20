@@ -97,6 +97,7 @@ function createWebStorage(): KeyValueStorage {
 
 function configToForm(config: GenerationConfig): UiFormState {
   return {
+    arrangement: config.arrangement,
     backgroundHex: colorToHex(config.backgroundColor),
     colorOrder: config.colorOrder,
     complexity: config.complexity,
@@ -111,6 +112,7 @@ function configToForm(config: GenerationConfig): UiFormState {
     paletteId: CUSTOM_PALETTE_ID,
     positionJitter: config.positionJitter,
     primitiveType: config.primitiveType,
+    rotationBaseDegrees: Math.round(radiansToDegrees(config.rotationBase)),
     rotationDegrees: Math.round(radiansToDegrees(config.rotationRange)),
     scale: config.scale,
     seed: String(config.seed),
@@ -262,6 +264,23 @@ export function App() {
           <option value="ellipse">Ellipse</option>
           <option value="line">Line</option>
           <option value="polygon">Polygon</option>
+          <option value="star">Star</option>
+          <option value="ring">Ring</option>
+          <option value="flower">Flower</option>
+          <option value="wave">Wave</option>
+        </select>
+      </label>
+      <label className="control-group">
+        Arrangement
+        <select
+          value={form.arrangement}
+          onChange={(event) =>
+            patchForm({ arrangement: event.currentTarget.value })
+          }
+        >
+          <option value="scatter">Scatter (organic)</option>
+          <option value="grid">Grid (neat)</option>
+          <option value="rows">Rows (stripes)</option>
         </select>
       </label>
       <label className="control-group">
@@ -301,6 +320,21 @@ export function App() {
           onInput={(event) =>
             patchForm({
               rotationDegrees: Number(event.currentTarget.value),
+            })
+          }
+        />
+      </label>
+      <label className="control-group">
+        Direction: {form.rotationBaseDegrees}°
+        <input
+          type="range"
+          min={0}
+          max={360}
+          step={5}
+          value={form.rotationBaseDegrees}
+          onInput={(event) =>
+            patchForm({
+              rotationBaseDegrees: Number(event.currentTarget.value),
             })
           }
         />

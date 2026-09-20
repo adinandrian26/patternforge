@@ -1,9 +1,11 @@
 import { err, ok } from "@patternforge/shared";
 import type { RenderCancellationSignal } from "@patternforge/renderer-engine";
-import type {
-  GenerationResult,
-  PatternPrimitive,
-  RgbaColor,
+import {
+  starVertices,
+  waveBandPoints,
+  type GenerationResult,
+  type PatternPrimitive,
+  type RgbaColor,
 } from "@patternforge/core";
 
 import type { ExportResult } from "./types";
@@ -162,38 +164,119 @@ function linePath(length: number, thickness: number): string {
     `${x1k} ${y2} ${x1k} ${y1} ${x1} ${y1} curveto closepath`
   );
 }
-
 function isPositive(value: number): boolean {
   return Number.isFinite(value) && value > 0;
 }
 
-function shapePath(primitive: PatternPrimitive): string {
-  switch (primitive.type) {
-    case "circle":
-      return isPositive(primitive.radius) ? circlePath(primitive.radius) : "";
-    case "rectangle":
-      return isPositive(primitive.width) && isPositive(primitive.height)
-        ? rectPath(primitive.width, primitive.height)
-        : "";
-    case "ellipse":
-      return isPositive(primitive.radiusX) && isPositive(primitive.radiusY)
-        ? ellipsePath(primitive.radiusX, primitive.radiusY)
-        : "";
-    case "line": {
-      const thickness =
-        "thickness" in primitive &&
-        typeof (primitive as { thickness?: unknown }).thickness === "number"
-          ? ((primitive as { thickness?: number }).thickness ?? 1)
-          : 1;
-      return isPositive(primitive.length) && isPositive(thickness)
-        ? linePath(primitive.length, thickness)
-        : "";
-    }
-    case "polygon":
-      return primitive.points.length >= 3 ? polygonPath(primitive.points) : "";
-  }
+function lineThicknessOf(primitive: PatternPrimitive): number {
+  return "thickness" in primitive &&
+    typeof (primitive as { thickness?: unknown }).thickness === "number"
+    ? ((primitive as { thickness?: number }).thickness ?? 1)
+    : 1;
 }
 
+/**
+ * Shape body lines inside the transformed frame (color is set by the
+ * caller). A body always ends with its own paint operator, since nested
+ * `gsave`/`grestore` frames cannot share one path.
+ */
+function shapeBody(primitive: PatternPrimitive): string[] {
+  switch (primitive.type) {
+    case "circle":
+      return isPositive(primitive.radius)
+        ? [circlePath(primitive.radius), "fill"]
+        : [];
+    case "rectangle":
+      return isPositive(primitive.width) && isPositive(primitive.height)
+        ? [rectPath(primitive.width, primitive.height), "fill"]
+        : [];
+    case "ellipse":
+      return isPositive(primitive.radiusX) && isPositive(primitive.radiusY)
+        ? [ellipsePath(primitive.radiusX, primitive.radiusY), "fill"]
+        : [];
+    case "line": {
+      const thickness = lineThicknessOf(primitive);
+      return isPositive(primitive.length) && isPositive(thickness)
+        ? [linePath(primitive.length, thickness), "fill"]
+        : [];
+    }
+    case "polygon": {
+      const path =
+        primitive.points.length >= 3 ? polygonPath(primitive.points) : "";
+      return path === "" ? [] : [path, "fill"];
+    }
+    case "star": {
+      if (
+        !Number.isSafeInteger(primitive.spikes) ||
+        primitive.spikes < 3 ||
+        !isPositive(primitive.radius) ||
+        !isPositive(primitive.innerRadius)
+      ) {
+        return [];
+      }
+      const path = polygonPath(
+        starVertices(primitive.spikes, primitive.radius, primitive.innerRadius),
+      );
+      return path === "" ? [] : [path, "fill"];
+    }
+    case "ring": {
+      const thickness = lineThicknessOf(primitive);
+      if (!isPositive(primitive.radius)) {
+        return [];
+      }
+      const inner = primitive.radius - thickness;
+      if (!(inner > 0)) {
+        return [circlePath(primitive.radius), "fill"];
+      }
+      return [circlePath(primitive.radius), circlePath(inner), "eofill"];
+    }
+    case "flower": {
+      if (
+        !Number.isSafeInteger(primitive.petals) ||
+        primitive.petals < 3 ||
+        !isPositive(primitive.petalLength) ||
+        !isPositive(primitive.petalWidth) ||
+        !isPositive(primitive.centerRadius)
+      ) {
+        return [];
+      }
+      const dist = primitive.centerRadius * 0.5 + primitive.petalLength / 2;
+      const lines: string[] = [];
+      for (let k = 0; k < primitive.petals; k += 1) {
+        lines.push("gsave");
+        lines.push(`${formatSvgNumber((k * 360) / primitive.petals)} rotate`);
+        lines.push(`${formatSvgNumber(dist)} 0 translate`);
+        lines.push(
+          ellipsePath(primitive.petalLength / 2, primitive.petalWidth / 2),
+        );
+        lines.push("fill");
+        lines.push("grestore");
+      }
+      lines.push(circlePath(primitive.centerRadius));
+      lines.push("fill");
+      return lines;
+    }
+    case "wave": {
+      const thickness = lineThicknessOf(primitive);
+      if (
+        !isPositive(primitive.length) ||
+        !isPositive(primitive.amplitude) ||
+        !isPositive(primitive.wavelength)
+      ) {
+        return [];
+      }
+      const path = polygonPath(
+        waveBandPoints(
+          primitive.length,
+          primitive.amplitude,
+          primitive.wavelength,
+          thickness,
+        ),
+      );
+      return path === "" ? [] : [path, "fill"];
+    }
+  }
+}
 export interface EpsSerializeOptions {
   readonly background: RgbaColor;
   readonly fallbackFill: RgbaColor;
@@ -278,8 +361,8 @@ export function serializeEps(
       return err({ code: "CANCELLED", message: "EPS export cancelled." });
     }
     index += 1;
-    const path = shapePath(primitive);
-    if (path === "") {
+    const body = shapeBody(primitive);
+    if (body.length === 0) {
       continue;
     }
     const color = primitive.color ?? options.fallbackFill;
@@ -301,8 +384,9 @@ export function serializeEps(
       `${formatSvgNumber(primitive.scale * sx)} ${formatSvgNumber(primitive.scale * sy)} scale`,
     );
     lines.push(rgbCommand(mixed));
-    lines.push(path);
-    lines.push("fill");
+    for (const bodyLine of body) {
+      lines.push(bodyLine);
+    }
     lines.push("grestore");
   }
   lines.push("grestore");

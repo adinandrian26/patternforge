@@ -107,8 +107,8 @@ describe("history", () => {
 });
 
 describe("templates", () => {
-  it("exposes ten validating deterministic templates", () => {
-    expect(BUILTIN_TEMPLATES).toHaveLength(10);
+  it("exposes fourteen validating deterministic templates", () => {
+    expect(BUILTIN_TEMPLATES).toHaveLength(14);
     const ids = new Set<string>();
     for (const template of BUILTIN_TEMPLATES) {
       expect(template.id.length).toBeGreaterThan(0);
@@ -132,12 +132,14 @@ describe("templates", () => {
         },
         palette: template.config.palette,
         parameters: {
+          arrangement: template.config.arrangement,
           canvasHeight: template.config.height,
           canvasWidth: template.config.width,
           complexity: template.config.complexity,
           density: template.config.density,
           positionJitter: template.config.positionJitter,
           primitiveType: template.config.primitiveType,
+          rotationBase: template.config.rotationBase,
           rotationRange: template.config.rotationRange,
           scale: template.config.scale,
         },

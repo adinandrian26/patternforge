@@ -8,7 +8,7 @@ Aplikasi desktop (Tauri v2 + Preact) untuk membuat pola seamless prosedural yang
 
 ## Feature set
 
-CORE: deterministic seed (uint32 canonical), Mulberry32 (`prng-v1`), pattern generation (`pattern-v1`), Circle/Rectangle/Ellipse/Line/Polygon, color system (typed RGBA), palette (1–32 warna), background, scale, rotation (derajat UI ↔ radian core), complexity, jitter, line thickness, opacity range, color order.
+CORE: deterministic seed (uint32 canonical), Mulberry32 (`prng-v1`), pattern generation (`pattern-v1`), Circle/Rectangle/Ellipse/Line/Polygon/Star/Ring/Flower/Wave, placement Scatter/Grid/Rows, direction base + range, color system (typed RGBA), palette (1–32 warna), background, scale, rotation (derajat UI ↔ radian core), complexity, jitter, line thickness, opacity range, color order.
 
 RENDER: RGBA raster renderer, seamless rendering (wrapped-center + 9 translated copies), 3×3 / 1×1 preview, pixel validation (toleransi 0), checksum FNV-1a, golden `a319b114` + `473443c3`.
 
@@ -16,7 +16,7 @@ EXPORT: PNG (encoder deterministik tanpa dependensi, stored DEFLATE), JPEG (via 
 
 PRODUCTIVITY: presets (save/load/duplicate/rename/delete, max 100), history (50 terakhir, timestamp hanya metadata UI), batch sequential (max 100, seed sequence, progress, cancel, failure isolation).
 
-ADVANCED: templates bawaan (10: Minimal, Geometric, Organic, Dots, Lines, Abstract, Grid, Shapes, Monochrome, Colorful), advanced controls (line thickness 0.5–8, opacity range, color order), optional AI assistant (default mock offline deterministik; OpenAI-compatible opt-in eksplisit, Apply/Cancel, tidak pernah auto-overwrite).
+ADVANCED: templates bawaan (14: Minimal, Geometric, Organic, Dots, Lines, Abstract, Grid, Shapes, Monochrome, Colorful, Retro Bloom, Zebra, Brush Dash, Bauhaus Rings), advanced controls (line thickness 0.5–8, opacity range, color order), optional AI assistant (default mock offline deterministik; OpenAI-compatible opt-in eksplisit, Apply/Cancel, tidak pernah auto-overwrite).
 
 PROJECT: local `.patternforge` JSON (`project-v1`) + palette text import, selalu divalidasi sebelum masuk core.
 

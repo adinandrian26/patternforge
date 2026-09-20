@@ -26,9 +26,12 @@ const PAPER: RgbaColor = { a: 255, b: 245, g: 240, r: 235 };
 const TEAL: RgbaColor = { a: 255, b: 150, g: 130, r: 30 };
 const CORAL: RgbaColor = { a: 255, b: 110, g: 130, r: 240 };
 const PLUM: RgbaColor = { a: 255, b: 130, g: 70, r: 110 };
+const BLOOM_BG: RgbaColor = { a: 255, b: 40, g: 90, r: 245 };
+const CREAM: RgbaColor = { a: 255, b: 235, g: 245, r: 255 };
 
 function base(overrides: Partial<GenerationConfig>): GenerationConfig {
   return {
+    arrangement: "scatter",
     backgroundColor: WHITE,
     colorOrder: "random",
     complexity: 3,
@@ -40,6 +43,7 @@ function base(overrides: Partial<GenerationConfig>): GenerationConfig {
     palette: { colors: [BLACK] },
     positionJitter: 0.1,
     primitiveType: "circle",
+    rotationBase: 0,
     rotationRange: Math.PI,
     scale: 0.5,
     seed: "12345",
@@ -160,6 +164,68 @@ export const BUILTIN_TEMPLATES: readonly BuiltinTemplate[] = [
     description: "Full-spectrum colorful tile.",
     id: "colorful",
     name: "Colorful",
+  },
+  {
+    config: base({
+      backgroundColor: BLOOM_BG,
+      complexity: 4,
+      density: 6,
+      palette: { colors: [CREAM, SAND] },
+      positionJitter: 0.15,
+      primitiveType: "flower",
+      rotationRange: Math.PI * 2,
+      scale: 0.55,
+    }),
+    description: "Retro cream blooms on orange.",
+    id: "retro-bloom",
+    name: "Retro Bloom",
+  },
+  {
+    config: base({
+      arrangement: "rows",
+      density: 9,
+      lineThickness: 3,
+      palette: { colors: [INK] },
+      positionJitter: 0.05,
+      primitiveType: "wave",
+      rotationBase: Math.PI / 2,
+      rotationRange: 0,
+      scale: 0.8,
+    }),
+    description: "Vertical wavy zebra stripes.",
+    id: "zebra",
+    name: "Zebra",
+  },
+  {
+    config: base({
+      arrangement: "rows",
+      density: 8,
+      lineThickness: 2.5,
+      palette: { colors: [INK] },
+      positionJitter: 0.08,
+      primitiveType: "line",
+      rotationBase: 0,
+      rotationRange: 0,
+      scale: 0.6,
+    }),
+    description: "Hand-brushed horizontal dashes.",
+    id: "brush-dash",
+    name: "Brush Dash",
+  },
+  {
+    config: base({
+      arrangement: "grid",
+      density: 9,
+      lineThickness: 2,
+      palette: { colors: [CRIMSON, NAVY, TEAL] },
+      positionJitter: 0.08,
+      primitiveType: "ring",
+      rotationRange: 0,
+      scale: 0.55,
+    }),
+    description: "Bauhaus rings on a neat grid.",
+    id: "bauhaus-rings",
+    name: "Bauhaus Rings",
   },
 ];
 
