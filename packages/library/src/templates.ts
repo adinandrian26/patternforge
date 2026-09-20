@@ -275,6 +275,36 @@ export const BUILTIN_TEMPLATES: readonly BuiltinTemplate[] = [
     id: "ink-bloom",
     name: "Ink Bloom",
   },
+  {
+    config: base({
+      arrangement: "cluster",
+      complexity: 5,
+      density: 10,
+      palette: { colors: [LEAF_GREEN, FOREST, BERRY, CREAM] },
+      positionJitter: 0.12,
+      primitiveType: "sprig",
+      rotationRange: Math.PI * 2,
+      scale: 0.7,
+    }),
+    description: "Wild meadow bouquets with mixed blooms.",
+    id: "wild-meadow",
+    name: "Wild Meadow",
+  },
+  {
+    config: base({
+      backgroundColor: NAVY,
+      complexity: 8,
+      density: 6,
+      palette: { colors: [{ a: 255, b: 130, g: 200, r: 230 }, CREAM] },
+      positionJitter: 0.12,
+      primitiveType: "flower",
+      rotationRange: Math.PI * 2,
+      scale: 0.55,
+    }),
+    description: "Pale gold blooms on deep navy.",
+    id: "gold-line-bloom",
+    name: "Gold Line Bloom",
+  },
 ];
 
 export function getTemplate(id: string): BuiltinTemplate | undefined {

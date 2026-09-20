@@ -33,6 +33,10 @@ const SUNSET_PURPLE: RgbaColor = { a: 255, b: 140, g: 70, r: 120 };
 const FOREST_DARK: RgbaColor = { a: 255, b: 60, g: 90, r: 35 };
 const FOREST_MID: RgbaColor = { a: 255, b: 110, g: 140, r: 60 };
 const FOREST_LIGHT: RgbaColor = { a: 255, b: 150, g: 190, r: 150 };
+const LEAF_GREEN: RgbaColor = { a: 255, b: 110, g: 150, r: 70 };
+const CREAM: RgbaColor = { a: 255, b: 235, g: 245, r: 255 };
+const BERRY_RED: RgbaColor = { a: 255, b: 60, g: 50, r: 200 };
+const GOLD: RgbaColor = { a: 255, b: 120, g: 190, r: 220 };
 
 export const CUSTOM_PALETTE_ID = "custom";
 
@@ -52,6 +56,21 @@ export const PALETTE_PRESETS: readonly PalettePreset[] = [
     colors: [FOREST_DARK, FOREST_MID, FOREST_LIGHT],
     id: "forest",
     name: "Forest",
+  },
+  {
+    colors: [LEAF_GREEN, FOREST_MID, BERRY_RED],
+    id: "botanical",
+    name: "Botanical",
+  },
+  {
+    colors: [GOLD, CREAM],
+    id: "navy-gold",
+    name: "Navy Gold",
+  },
+  {
+    colors: [BERRY_RED, FOREST_MID, CREAM],
+    id: "berry",
+    name: "Berry",
   },
 ];
 

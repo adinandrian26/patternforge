@@ -2,6 +2,8 @@ import { err, ok } from "@patternforge/shared";
 import type { RenderCancellationSignal } from "@patternforge/renderer-engine";
 import {
   colorToHex,
+  sprigStemPoint,
+  sprigStemTangent,
   starVertices,
   waveBandPoints,
   type GenerationResult,
@@ -97,6 +99,8 @@ function flowerInner(
   petalWidth: number,
   centerRadius: number,
   paint: string,
+  innerScale: number,
+  accentPaint: string | null,
 ): string {
   const dist = centerRadius * 0.5 + petalLength / 2;
   const rx = formatSvgNumber(petalLength / 2);
@@ -114,7 +118,28 @@ function flowerInner(
   inner +=
     `<circle cx="${x}" cy="${y}" ` +
     `r="${formatSvgNumber(centerRadius)}"${paint}/>`;
+  if (accentPaint !== null && innerScale > 0 && innerScale < 1) {
+    const irx = formatSvgNumber((petalLength * innerScale) / 2);
+    const iry = formatSvgNumber((petalWidth * innerScale) / 2);
+    for (let k = 0; k < petals; k += 1) {
+      const deg = formatSvgNumber((k * 360) / petals);
+      inner +=
+        `<g transform="translate(${x} ${y}) rotate(${deg})">` +
+        `<ellipse cx="${d}" cy="0" rx="${irx}" ry="${iry}"${accentPaint}/></g>`;
+    }
+  }
   return inner;
+}
+
+function accentPaintFor(
+  accent: RgbaColor | undefined,
+  opacity: number,
+): string | null {
+  if (accent === undefined) {
+    return null;
+  }
+  const fill = fillForColor(accent, opacity);
+  return ` fill="${fill.fill}" fill-opacity="${fill.fillOpacity}"`;
 }
 
 function shapeFor(primitive: PatternPrimitive, fallback: RgbaColor): string {
@@ -204,6 +229,8 @@ function shapeFor(primitive: PatternPrimitive, fallback: RgbaColor): string {
         primitive.petalWidth,
         primitive.centerRadius,
         paint,
+        primitive.innerScale,
+        accentPaintFor(primitive.accent, primitive.opacity),
       )}</g>`;
     }
     case "wave": {
@@ -223,16 +250,33 @@ function shapeFor(primitive: PatternPrimitive, fallback: RgbaColor): string {
     }
     case "sprig": {
       const thickness = lineThicknessOf(primitive);
+      const bend = formatSvgNumber(primitive.stemBend);
+      const halfLen = formatSvgNumber(primitive.stemLength / 2);
       const stemLen = formatSvgNumber(primitive.stemLength);
       let inner =
-        `<line x1="0" y1="0" x2="0" y2="${stemLen}" ` +
+        `<path d="M0,0 Q${bend},${halfLen} 0,${stemLen}" ` +
         `stroke="${fill}" stroke-opacity="${fillOpacity}" ` +
-        `stroke-width="${formatSvgNumber(thickness)}" stroke-linecap="round"/>`;
+        `stroke-width="${formatSvgNumber(thickness)}" stroke-linecap="round" fill="none"/>`;
       for (const leaf of primitive.leaves) {
-        const deg = formatSvgNumber(90 - (leaf.angle * 180) / Math.PI);
-        const y = formatSvgNumber(leaf.along * primitive.stemLength);
+        const bp = sprigStemPoint(
+          primitive.stemBend,
+          primitive.stemLength,
+          leaf.along,
+        );
+        const bt = sprigStemTangent(
+          primitive.stemBend,
+          primitive.stemLength,
+          leaf.along,
+        );
+        const ca = Math.cos(leaf.angle);
+        const sa = Math.sin(leaf.angle);
+        const dirX = bt.x * ca - bt.y * sa;
+        const dirY = bt.x * sa + bt.y * ca;
+        const deg = formatSvgNumber((Math.atan2(dirY, dirX) * 180) / Math.PI);
+        const bx = formatSvgNumber(bp.x);
+        const by = formatSvgNumber(bp.y);
         inner +=
-          `<g transform="translate(0 ${y}) rotate(${deg})">` +
+          `<g transform="translate(${bx} ${by}) rotate(${deg})">` +
           `<path d="${leafPath(leaf.length, leaf.width)}"${paint}/></g>`;
       }
       for (const berry of primitive.berries) {
@@ -252,6 +296,8 @@ function shapeFor(primitive: PatternPrimitive, fallback: RgbaColor): string {
           primitive.flower.petalLength,
           primitive.flower.petalWidth,
           primitive.flower.centerRadius,
+          accentPaint,
+          primitive.flower.innerScale,
           accentPaint,
         );
       }

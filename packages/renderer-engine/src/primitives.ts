@@ -3,6 +3,8 @@ import {
   isRgbaColor,
   MAX_LINE_THICKNESS,
   MIN_LINE_THICKNESS,
+  sprigStemPoint,
+  sprigStemTangent,
   starVertices,
   type PatternPrimitive,
 } from "@patternforge/core";
@@ -238,6 +240,20 @@ export function validatePrimitive(
           ),
         );
       }
+      if (
+        !isFiniteNumber(primitive.innerScale) ||
+        primitive.innerScale <= 0 ||
+        primitive.innerScale > 1
+      ) {
+        return err(
+          invalidPrimitive("Flower innerScale must be finite in (0, 1]."),
+        );
+      }
+      if (primitive.accent !== undefined && !isRgbaColor(primitive.accent)) {
+        return err(
+          invalidPrimitive("Flower accent must be a valid RGBA color."),
+        );
+      }
       return ok(primitive);
     }
     case "wave": {
@@ -290,7 +306,9 @@ export function validatePrimitive(
         primitive.stemLength > MAX_GEOMETRY_EXTENT * 2 ||
         !isPositiveFinite(primitive.stemThickness) ||
         primitive.stemThickness < MIN_LINE_THICKNESS ||
-        primitive.stemThickness > MAX_LINE_THICKNESS
+        primitive.stemThickness > MAX_LINE_THICKNESS ||
+        !isFiniteNumber(primitive.stemBend) ||
+        Math.abs(primitive.stemBend) > MAX_GEOMETRY_EXTENT
       ) {
         return err(
           invalidPrimitive("Sprig stem must be finite, positive, and bounded."),
@@ -344,6 +362,9 @@ export function validatePrimitive(
           flower.petalWidth > MAX_GEOMETRY_EXTENT ||
           !isPositiveFinite(flower.centerRadius) ||
           flower.centerRadius > MAX_GEOMETRY_EXTENT ||
+          !isFiniteNumber(flower.innerScale) ||
+          flower.innerScale <= 0 ||
+          flower.innerScale > 1 ||
           !isFiniteNumber(flower.x) ||
           !isFiniteNumber(flower.y)
         ) {
@@ -514,6 +535,40 @@ function testFlowerAt(
   const dist = centerRadius * 0.5 + petalLength / 2;
   const halfL = petalLength / 2;
   const halfW = petalWidth / 2;
+  for (let k = 0; k < petals; k += 1) {
+    const angle = (k * Math.PI * 2) / petals;
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    const relX = lx - dirX * dist;
+    const relY = ly - dirY * dist;
+    const along = relX * dirX + relY * dirY;
+    const across = relX * dirY - relY * dirX;
+    if (
+      (along * along) / (halfL * halfL) + (across * across) / (halfW * halfW) <=
+      1
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Inner-petal overlay test (accent color); same centers, scaled petals. */
+function testFlowerInnerAt(
+  lx: number,
+  ly: number,
+  petals: number,
+  petalLength: number,
+  petalWidth: number,
+  centerRadius: number,
+  innerScale: number,
+): boolean {
+  if (!(innerScale > 0) || innerScale >= 1) {
+    return false;
+  }
+  const dist = centerRadius * 0.5 + petalLength / 2;
+  const halfL = (petalLength * innerScale) / 2;
+  const halfW = (petalWidth * innerScale) / 2;
   for (let k = 0; k < petals; k += 1) {
     const angle = (k * Math.PI * 2) / petals;
     const dirX = Math.cos(angle);
@@ -831,6 +886,7 @@ export function rasterizeSingleCopy(
       if (box === null) {
         return { cancelled: false };
       }
+      const accent = primitive.accent ?? foreground;
       for (let y = box.y0; y <= box.y1; y += 1) {
         if (signal?.isCancelled() === true) {
           return { cancelled: true };
@@ -840,6 +896,18 @@ export function rasterizeSingleCopy(
           const px = x + 0.5;
           const local = toLocal(px - centerX, py - centerY, frame);
           if (
+            testFlowerInnerAt(
+              local.x,
+              local.y,
+              petals,
+              petalLength,
+              petalWidth,
+              centerRadius,
+              primitive.innerScale,
+            )
+          ) {
+            blendPixelAt(image, x, y, accent, opacity);
+          } else if (
             testFlowerAt(
               local.x,
               local.y,
@@ -950,22 +1018,43 @@ export function rasterizeSingleCopy(
     case "sprig": {
       const stemLength = primitive.stemLength * scale;
       const stemThickness = primitive.stemThickness;
+      let reach = stemLength + stemThickness;
+      for (const leaf of primitive.leaves) {
+        reach = Math.max(reach, leaf.length * scale);
+      }
+      if (primitive.flower !== null) {
+        reach = Math.max(
+          reach,
+          primitive.flower.petalLength * scale +
+            primitive.flower.centerRadius * scale,
+        );
+      }
+      reach += 2;
       const box = clampAabb(
-        centerX - stemLength - 8,
-        centerX + stemLength + 8,
-        centerY - stemLength - 8,
-        centerY + stemLength + 8,
+        centerX - reach,
+        centerX + reach,
+        centerY - reach,
+        centerY + reach,
         image.width,
         image.height,
       );
       if (box === null) {
         return { cancelled: false };
       }
+      // Curved stem in world space (thickness unscaled, like lines).
+      const stemSegs = 16;
+      const stemXs: number[] = [];
+      const stemYs: number[] = [];
+      for (let i = 0; i <= stemSegs; i += 1) {
+        const t = i / stemSegs;
+        const p = sprigStemPoint(primitive.stemBend, primitive.stemLength, t);
+        const sx = p.x * scale;
+        const sy = p.y * scale;
+        stemXs.push(sx * cos - sy * sin + centerX);
+        stemYs.push(sx * sin + sy * cos + centerY);
+      }
       const radiusSq = (stemThickness / 2) * (stemThickness / 2);
-      const ax = centerX;
-      const ay = centerY;
-      const bx = centerX - sin * stemLength;
-      const by = centerY + cos * stemLength;
+      const accent = primitive.accent ?? foreground;
       for (let y = box.y0; y <= box.y1; y += 1) {
         if (signal?.isCancelled() === true) {
           return { cancelled: true };
@@ -973,8 +1062,24 @@ export function rasterizeSingleCopy(
         const py = y + 0.5;
         for (let x = box.x0; x <= box.x1; x += 1) {
           const px = x + 0.5;
-          if (distanceToSegmentSquared(px, py, ax, ay, bx, by) <= radiusSq) {
-            blendPixelAt(image, x, y, foreground, opacity);
+          let onStem = false;
+          for (let i = 0; i < stemSegs; i += 1) {
+            if (
+              distanceToSegmentSquared(
+                px,
+                py,
+                stemXs[i] ?? 0,
+                stemYs[i] ?? 0,
+                stemXs[i + 1] ?? 0,
+                stemYs[i + 1] ?? 0,
+              ) <= radiusSq
+            ) {
+              blendPixelAt(image, x, y, foreground, opacity);
+              onStem = true;
+              break;
+            }
+          }
+          if (onStem) {
             continue;
           }
           const local = toLocal(px - centerX, py - centerY, frame);
@@ -982,12 +1087,22 @@ export function rasterizeSingleCopy(
           const sly = local.y / scale;
           let painted = false;
           for (const leaf of primitive.leaves) {
-            const baseX = 0;
-            const baseY = leaf.along * primitive.stemLength;
-            const dirX = Math.sin(leaf.angle);
-            const dirY = Math.cos(leaf.angle);
-            const cx = baseX + dirX * (leaf.length / 2);
-            const cy = baseY + dirY * (leaf.length / 2);
+            const bp = sprigStemPoint(
+              primitive.stemBend,
+              primitive.stemLength,
+              leaf.along,
+            );
+            const bt = sprigStemTangent(
+              primitive.stemBend,
+              primitive.stemLength,
+              leaf.along,
+            );
+            const ca = Math.cos(leaf.angle);
+            const sa = Math.sin(leaf.angle);
+            const dirX = bt.x * ca - bt.y * sa;
+            const dirY = bt.x * sa + bt.y * ca;
+            const cx = bp.x + dirX * (leaf.length / 2);
+            const cy = bp.y + dirY * (leaf.length / 2);
             const relX = slx - cx;
             const relY = sly - cy;
             const along = relX * dirX + relY * dirY;
@@ -1014,18 +1129,33 @@ export function rasterizeSingleCopy(
             continue;
           }
           const flower = primitive.flower;
-          if (
-            flower !== null &&
-            testFlowerAt(
-              slx - flower.x,
-              sly - flower.y,
-              flower.petals,
-              flower.petalLength,
-              flower.petalWidth,
-              flower.centerRadius,
-            )
-          ) {
-            blendPixelAt(image, x, y, primitive.accent ?? foreground, opacity);
+          if (flower !== null) {
+            const fx = slx - flower.x;
+            const fy = sly - flower.y;
+            if (
+              testFlowerInnerAt(
+                fx,
+                fy,
+                flower.petals,
+                flower.petalLength,
+                flower.petalWidth,
+                flower.centerRadius,
+                flower.innerScale,
+              )
+            ) {
+              blendPixelAt(image, x, y, accent, opacity);
+            } else if (
+              testFlowerAt(
+                fx,
+                fy,
+                flower.petals,
+                flower.petalLength,
+                flower.petalWidth,
+                flower.centerRadius,
+              )
+            ) {
+              blendPixelAt(image, x, y, foreground, opacity);
+            }
           }
         }
       }

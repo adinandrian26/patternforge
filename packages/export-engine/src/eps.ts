@@ -4,6 +4,8 @@ import {
   leafCubicEdges,
   MAX_LINE_THICKNESS,
   MIN_LINE_THICKNESS,
+  sprigStemPoint,
+  sprigStemTangent,
   starVertices,
   waveBandPoints,
   type GenerationResult,
@@ -201,6 +203,8 @@ function flowerBody(
   petalLength: number,
   petalWidth: number,
   centerRadius: number,
+  innerScale: number,
+  accentLine: string | null,
 ): string[] {
   const dist = centerRadius * 0.5 + petalLength / 2;
   const lines: string[] = [];
@@ -218,7 +222,45 @@ function flowerBody(
   lines.push(circlePath(centerRadius));
   lines.push("fill");
   lines.push("grestore");
+  if (accentLine !== null && innerScale > 0 && innerScale < 1) {
+    lines.push(accentLine);
+    for (let k = 0; k < petals; k += 1) {
+      lines.push("gsave");
+      lines.push(`${formatSvgNumber(fx)} ${formatSvgNumber(fy)} translate`);
+      lines.push(`${formatSvgNumber((k * 360) / petals)} rotate`);
+      lines.push(`${formatSvgNumber(dist)} 0 translate`);
+      lines.push(
+        ellipsePath(
+          (petalLength * innerScale) / 2,
+          (petalWidth * innerScale) / 2,
+        ),
+      );
+      lines.push("fill");
+      lines.push("grestore");
+    }
+  }
   return lines;
+}
+
+/** Filled stem band along the sprig curve (round ends via semicircle). */
+function stemBandPath(bend: number, length: number, thickness: number): string {
+  const segments = 16;
+  const half = thickness / 2;
+  const top: string[] = [];
+  const bottom: string[] = [];
+  for (let i = 0; i <= segments; i += 1) {
+    const t = i / segments;
+    const p = sprigStemPoint(bend, length, t);
+    const tan = sprigStemTangent(bend, length, t);
+    const nx = -tan.y * half;
+    const ny = tan.x * half;
+    top.push(`${formatSvgNumber(p.x + nx)} ${formatSvgNumber(p.y + ny)}`);
+    bottom.push(`${formatSvgNumber(p.x - nx)} ${formatSvgNumber(p.y - ny)}`);
+  }
+  const forward = top.join(" lineto ");
+  const backward = bottom.reverse().join(" lineto ");
+  const [sx, sy] = top[0]?.split(" ") ?? ["0", "0"];
+  return `newpath ${sx} ${sy} moveto ${forward} lineto ${backward} lineto closepath`;
 }
 
 /**
@@ -298,6 +340,8 @@ function shapeBody(
         primitive.petalLength,
         primitive.petalWidth,
         primitive.centerRadius,
+        primitive.innerScale,
+        primitive.accent !== undefined ? paint(primitive.accent) : null,
       );
     }
     case "wave": {
@@ -331,28 +375,45 @@ function shapeBody(
         !Number.isFinite(primitive.stemThickness) ||
         primitive.stemThickness < MIN_LINE_THICKNESS ||
         primitive.stemThickness > MAX_LINE_THICKNESS ||
+        !Number.isFinite(primitive.stemBend) ||
         primitive.leaves.length > 6 ||
         primitive.berries.length > 6
       ) {
         return [];
       }
       const lines: string[] = [];
-      lines.push("gsave");
-      lines.push(`0 ${formatSvgNumber(primitive.stemLength / 2)} translate`);
-      lines.push("90 rotate");
-      lines.push(linePath(primitive.stemLength, primitive.stemThickness));
+      lines.push(
+        stemBandPath(
+          primitive.stemBend,
+          primitive.stemLength,
+          primitive.stemThickness,
+        ),
+      );
       lines.push("fill");
-      lines.push("grestore");
       for (const leaf of primitive.leaves) {
         if (!isPositive(leaf.length) || !isPositive(leaf.width)) {
           continue;
         }
+        const bp = sprigStemPoint(
+          primitive.stemBend,
+          primitive.stemLength,
+          leaf.along,
+        );
+        const bt = sprigStemTangent(
+          primitive.stemBend,
+          primitive.stemLength,
+          leaf.along,
+        );
+        const ca = Math.cos(leaf.angle);
+        const sa = Math.sin(leaf.angle);
+        const dirX = bt.x * ca - bt.y * sa;
+        const dirY = bt.x * sa + bt.y * ca;
         lines.push("gsave");
         lines.push(
-          `0 ${formatSvgNumber(leaf.along * primitive.stemLength)} translate`,
+          `${formatSvgNumber(bp.x)} ${formatSvgNumber(bp.y)} translate`,
         );
         lines.push(
-          `${formatSvgNumber(90 - (leaf.angle * 180) / Math.PI)} rotate`,
+          `${formatSvgNumber((Math.atan2(dirY, dirX) * 180) / Math.PI)} rotate`,
         );
         lines.push(leafPath(leaf.length, leaf.width));
         lines.push("fill");
@@ -372,7 +433,11 @@ function shapeBody(
       }
       if (primitive.flower !== null) {
         const flower = primitive.flower;
-        lines.push(paint(primitive.accent ?? { a: 255, b: 0, g: 0, r: 0 }));
+        const accentLine =
+          primitive.accent !== undefined ? paint(primitive.accent) : null;
+        if (accentLine !== null) {
+          lines.push(accentLine);
+        }
         for (const bodyLine of flowerBody(
           flower.x,
           flower.y,
@@ -380,6 +445,8 @@ function shapeBody(
           flower.petalLength,
           flower.petalWidth,
           flower.centerRadius,
+          flower.innerScale,
+          accentLine,
         )) {
           lines.push(bodyLine);
         }

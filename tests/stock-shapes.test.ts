@@ -175,10 +175,10 @@ describe("stock shape generation", () => {
     const cases: ReadonlyArray<readonly [string, string]> = [
       ["star", "eee95304"],
       ["ring", "8cbfc1dd"],
-      ["flower", "8ee75b44"],
+      ["flower", "941def7d"],
       ["wave", "e5e42324"],
       ["leaf", "c43b083d"],
-      ["sprig", "fdddb615"],
+      ["sprig", "148299fd"],
     ];
     for (const [primitiveType, golden] of cases) {
       const pattern = generateFor("4242", {
@@ -376,7 +376,7 @@ describe("botanical details", () => {
     if (!serialized.ok) {
       throw new Error("sprig svg failed");
     }
-    expect(serialized.value).toContain("<line");
+    expect(serialized.value).toContain("M0,0 Q");
     expect(serialized.value).toContain("<ellipse");
     expect(serialized.value).toContain("<circle");
   });
@@ -399,6 +399,7 @@ describe("botanical details", () => {
           color: red,
           flower: {
             centerRadius: 2,
+            innerScale: 0.5,
             petalLength: 10,
             petals: 5,
             petalWidth: 4,
@@ -410,6 +411,7 @@ describe("botanical details", () => {
           opacity: 1,
           rotation: 0,
           scale: 1,
+          stemBend: 0,
           stemLength: 20,
           stemThickness: 1.5,
           type: "sprig",
@@ -433,6 +435,101 @@ describe("botanical details", () => {
     }
     expect(serialized.value).toContain("1 0 0 setrgbcolor");
     expect(serialized.value).toContain("0 0 1 setrgbcolor");
+    expect(/\bstroke\b/.test(serialized.value)).toBe(false);
+  });
+
+  it("groups cluster members around stable bouquet centers", () => {
+    const first = generateFor("4242", {
+      arrangement: "cluster",
+      density: 10,
+      height: 64,
+      width: 64,
+    });
+    const second = generateFor("4242", {
+      arrangement: "cluster",
+      density: 10,
+      height: 64,
+      width: 64,
+    });
+    expect(first).toEqual(second);
+    // count = ceil(64*64*10/10000) = 5 -> one group: slot 0 feature + fillers.
+    expect(first.primitiveCount).toBe(5);
+    const feature = first.primitives[0];
+    if (feature === undefined) {
+      throw new Error("no primitives");
+    }
+    for (const filler of first.primitives.slice(1)) {
+      const dx = filler.x - feature.x;
+      const dy = filler.y - feature.y;
+      expect(Math.sqrt(dx * dx + dy * dy)).toBeLessThan(32);
+    }
+    expect(checksumOf(first)).toBe("fc65d564");
+  });
+
+  it("paints two-tone flower heads with multi-color palettes", () => {
+    const red = { a: 255, b: 0, g: 0, r: 255 };
+    const blue = { a: 255, b: 255, g: 0, r: 0 };
+    const config = validateGenerationConfig({
+      ...DEFAULT_GENERATION_CONFIG,
+      complexity: 4,
+      density: 10,
+      height: 64,
+      palette: { colors: [red, blue] },
+      primitiveType: "flower",
+      seed: "4242",
+      width: 64,
+    });
+    if (!config.ok) {
+      throw new Error("config invalid");
+    }
+    const value = config.value;
+    const generated = generatePattern({
+      algorithmVersion: PATTERN_ALGORITHM_VERSION,
+      dimensions: { height: 64, width: 64 },
+      options: {
+        colorOrder: value.colorOrder,
+        lineThickness: value.lineThickness,
+        opacityMax: value.opacityMax,
+        opacityMin: value.opacityMin,
+      },
+      palette: value.palette,
+      parameters: {
+        arrangement: value.arrangement,
+        canvasHeight: 64,
+        canvasWidth: 64,
+        complexity: 4,
+        density: 10,
+        positionJitter: 0.1,
+        primitiveType: "flower",
+        rotationBase: 0,
+        rotationRange: Math.PI,
+        scale: 0.5,
+      },
+      schemaVersion: SCHEMA_VERSION,
+      seed: value.seed,
+    });
+    if (!generated.ok) {
+      throw new Error("generation failed");
+    }
+    const accents = new Set(
+      generated.value.primitives
+        .filter((p) => p.type === "flower")
+        .map((p) =>
+          p.type === "flower" && p.accent !== undefined
+            ? `${p.accent.r},${p.accent.g},${p.accent.b}`
+            : "none",
+        ),
+    );
+    expect(accents.size).toBeGreaterThan(0);
+    const serialized = serializeEps(generated.value, {
+      background: BG,
+      fallbackFill: FG,
+      targetHeight: 2000,
+      targetWidth: 2000,
+    });
+    if (!serialized.ok) {
+      throw new Error("eps failed");
+    }
     expect(/\bstroke\b/.test(serialized.value)).toBe(false);
   });
 });

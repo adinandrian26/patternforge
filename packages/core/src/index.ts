@@ -28,13 +28,18 @@ export const PRIMITIVE_TYPES = [
 
 export type PrimitiveType = (typeof PRIMITIVE_TYPES)[number];
 
-/** Placement strategy: free scatter, lattice grid, or horizontal rows. */
-export const ARRANGEMENTS = ["scatter", "grid", "rows"] as const;
+/** Placement: free scatter, lattice grid, horizontal rows, bouquet clusters. */
+export const ARRANGEMENTS = ["scatter", "grid", "rows", "cluster"] as const;
 
 export type Arrangement = (typeof ARRANGEMENTS)[number];
 
 export function isArrangement(value: unknown): value is Arrangement {
-  return value === "scatter" || value === "grid" || value === "rows";
+  return (
+    value === "scatter" ||
+    value === "grid" ||
+    value === "rows" ||
+    value === "cluster"
+  );
 }
 
 export interface Point {
@@ -87,6 +92,28 @@ export function waveBandPoints(
     points.push({ x, y: y + halfThickness });
   }
   return points;
+}
+
+/**
+ * Quadratic sprig stem: from origin to (0, length) with control
+ * (bend, length/2). y(t) is exactly t*length; x carries the curve.
+ */
+export function sprigStemPoint(bend: number, length: number, t: number): Point {
+  const u = t < 0 ? 0 : t > 1 ? 1 : t;
+  return { x: 2 * u * (1 - u) * bend, y: u * length };
+}
+
+/** Normalized stem tangent at t (sprig-local units). */
+export function sprigStemTangent(
+  bend: number,
+  length: number,
+  t: number,
+): Point {
+  const u = t < 0 ? 0 : t > 1 ? 1 : t;
+  const dx = 2 * (1 - 2 * u) * bend;
+  const dy = length;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  return len === 0 ? { x: 0, y: 1 } : { x: dx / len, y: dy / len };
 }
 
 export interface LeafCubicEdge {
@@ -387,7 +414,11 @@ export interface Ring extends PatternPrimitiveBase {
 }
 
 export interface Flower extends PatternPrimitiveBase {
+  /** Second color for inner petals; solid when absent. */
+  readonly accent?: RgbaColor;
   readonly centerRadius: number;
+  /** Inner petal scale in (0, 1]: accent overlay, 1 disables it. */
+  readonly innerScale: number;
   readonly petalLength: number;
   /** Petal count in 3..12. */
   readonly petals: number;
@@ -431,6 +462,7 @@ export interface SprigBerry {
 
 export interface SprigFlower {
   readonly centerRadius: number;
+  readonly innerScale: number;
   readonly petalLength: number;
   readonly petals: number;
   readonly petalWidth: number;
@@ -448,6 +480,8 @@ export interface Sprig extends PatternPrimitiveBase {
   readonly berries: readonly SprigBerry[];
   readonly flower: SprigFlower | null;
   readonly leaves: readonly SprigLeaf[];
+  /** Quadratic stem bend in pixels (control offset, 0 = straight). */
+  readonly stemBend: number;
   readonly stemLength: number;
   readonly stemThickness: number;
   readonly type: "sprig";

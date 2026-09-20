@@ -283,6 +283,7 @@ export function App() {
           <option value="scatter">Scatter (organic)</option>
           <option value="grid">Grid (neat)</option>
           <option value="rows">Rows (stripes)</option>
+          <option value="cluster">Cluster (bouquet)</option>
         </select>
       </label>
       <label className="control-group">

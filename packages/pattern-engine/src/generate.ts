@@ -108,6 +108,15 @@ function createPrimitiveId(index: number): EntityId {
   return `primitive-${String(index + 1).padStart(6, "0")}` as EntityId;
 }
 
+/** Exactly deterministic 0..1 hash (integer math, no Math.sin). */
+function hash01(n: number): number {
+  let x = (n * 2654435761) >>> 0;
+  x ^= x >>> 15;
+  x = Math.imul(x, 2246822519);
+  x ^= x >>> 13;
+  return (x >>> 0) / 4294967296;
+}
+
 function createBase(
   id: EntityId,
   index: number,
@@ -178,6 +187,41 @@ function createBase(
       y:
         ((row + 0.5) * dimensions.height) / rows +
         signedRandom(rng, jitterRadius),
+    };
+  }
+
+  if (parameters.arrangement === "cluster") {
+    const groupSize = 7;
+    const group = Math.floor(index / groupSize);
+    const slot = index % groupSize;
+    // Stable bouquet center per group (hash, no stream draw).
+    const cx = hash01(group * 2) * dimensions.width;
+    const cy = hash01(group * 2 + 1) * dimensions.height;
+    if (slot === 0) {
+      return {
+        id,
+        opacity,
+        rotation,
+        scale: Math.min(1, scale * 1.2),
+        x: cx + signedRandom(rng, jitterRadius),
+        y: cy + signedRandom(rng, jitterRadius),
+      };
+    }
+    // Fillers orbit the feature member (gaussian-ish via summed draws).
+    const spread = Math.min(dimensions.width, dimensions.height) * 0.08;
+    const ox =
+      (rng.nextFloat() + rng.nextFloat() - 1) * spread +
+      signedRandom(rng, jitterRadius);
+    const oy =
+      (rng.nextFloat() + rng.nextFloat() - 1) * spread +
+      signedRandom(rng, jitterRadius);
+    return {
+      id,
+      opacity,
+      rotation,
+      scale: Math.min(1, scale * 0.55),
+      x: cx + ox,
+      y: cy + oy,
     };
   }
 
@@ -311,6 +355,7 @@ function createPrimitive(
       primitive = {
         ...base,
         centerRadius: petalLength * (0.2 + rng.nextFloat() * 0.1),
+        innerScale: 0.45 + rng.nextFloat() * 0.25,
         petalLength,
         petals,
         petalWidth: petalLength * (0.35 + rng.nextFloat() * 0.25),
@@ -375,6 +420,7 @@ function createPrimitive(
         flower: hasFlower
           ? {
               centerRadius: petalLength * 0.25,
+              innerScale: 0.45 + rng.nextFloat() * 0.25,
               petalLength,
               petals: 4 + Math.floor(rng.nextFloat() * 5),
               petalWidth: petalLength * (0.4 + rng.nextFloat() * 0.2),
@@ -383,6 +429,7 @@ function createPrimitive(
             }
           : null,
         leaves,
+        stemBend: (rng.nextFloat() * 2 - 1) * stemLength * 0.2,
         stemLength,
         stemThickness: options.lineThickness,
         type: "sprig",
@@ -400,8 +447,15 @@ function createPrimitive(
       options.colorOrder === "sequential"
         ? (palette.colors[index % palette.colors.length] as RgbaColor)
         : rng.pick(palette.colors);
-    if (primitive.type === "sprig" && primitive.flower !== null) {
-      return { ...primitive, accent: rng.pick(palette.colors), color };
+    if (
+      primitive.type === "flower" ||
+      (primitive.type === "sprig" && primitive.flower !== null)
+    ) {
+      const accent: RgbaColor =
+        options.colorOrder === "sequential"
+          ? (palette.colors[(index + 1) % palette.colors.length] as RgbaColor)
+          : rng.pick(palette.colors);
+      return { ...primitive, accent, color };
     }
     return { ...primitive, color };
   }
